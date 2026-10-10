@@ -8,6 +8,9 @@ export async function GET(
 ) {
   try {
     const { fileName } = await params
+    if (path.basename(fileName) !== fileName || fileName.includes('..')) {
+      return NextResponse.json({ error: 'Invalid file name' }, { status: 400 })
+    }
     const filePath = path.join(process.cwd(), 'public', 'processed', fileName)
 
     // Check if file exists
@@ -27,7 +30,8 @@ export async function GET(
     // Set headers for preview (not download)
     const headers = new Headers()
     headers.set('Content-Type', contentType)
-    headers.set('Cache-Control', 'public, max-age=3600')
+    headers.set('Cache-Control', 'private, max-age=3600')
+    headers.set('X-Content-Type-Options', 'nosniff')
 
     return new NextResponse(fileBuffer, { headers })
 

@@ -71,6 +71,20 @@ export async function DELETE(request: NextRequest) {
     // Parse query parameters
     const { searchParams } = new URL(request.url)
     const olderThanHours = searchParams.get('olderThan') // Optional: only delete files older than X hours
+    let requestedFiles: string[] | null = null
+    if (!olderThanHours) {
+      try {
+        const body = await request.json()
+        requestedFiles = Array.isArray(body?.files)
+          ? body.files.filter((file: unknown): file is string => typeof file === 'string' && path.basename(file) === file && !file.includes('..'))
+          : null
+      } catch {
+        requestedFiles = null
+      }
+      if (!requestedFiles) {
+        return NextResponse.json({ error: 'Specify processed file names or an olderThan retention window.' }, { status: 400 })
+      }
+    }
 
     // Check if directory exists
     try {
@@ -91,6 +105,7 @@ export async function DELETE(request: NextRequest) {
 
     // Delete each file
     for (const file of files) {
+      if (requestedFiles && !requestedFiles.includes(file)) continue
       const filePath = path.join(absoluteProcessedDir, file)
       
       try {

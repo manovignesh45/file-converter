@@ -1,22 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import multer from 'multer'
-import { promisify } from 'util'
 import { ImageCompressionService } from '../../../services/imageCompressionService'
 import { ImageResizeService } from '../../../services/imageResizeService'
 import { ImageToPdfService } from '../../../services/imageToPdfService'
 import { FormatConversionService } from '../../../services/formatConversionService'
 import { PdfCompressionService } from '../../../services/pdfCompressionService'
 import { PdfPasswordService } from '../../../services/pdfPasswordService'
-
-// Configure multer for memory storage
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit
-  },
-})
-
-const uploadMiddleware = promisify(upload.array('images'))
+import { hasPdfSignature, MAX_PDF_BYTES } from '../../../lib/pdf/validation'
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,6 +16,21 @@ export async function POST(request: NextRequest) {
     
     if (!files || files.length === 0) {
       return NextResponse.json({ error: 'No files uploaded' }, { status: 400 })
+    }
+
+    for (const file of files) {
+      if (!(file instanceof File) || file.size === 0) {
+        return NextResponse.json({ error: 'Uploaded files must not be empty.' }, { status: 400 })
+      }
+      if (file.size > MAX_PDF_BYTES) {
+        return NextResponse.json({ error: `${file.name} exceeds the 50 MB limit.` }, { status: 413 })
+      }
+      if (file.type === 'application/pdf') {
+        const signature = new Uint8Array(await file.slice(0, 5).arrayBuffer())
+        if (!hasPdfSignature(signature)) {
+          return NextResponse.json({ error: `${file.name} is not a valid PDF.` }, { status: 415 })
+        }
+      }
     }
 
     const options = JSON.parse(optionsStr)

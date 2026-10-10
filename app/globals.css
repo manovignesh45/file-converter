@@ -1,3 +1,5 @@
+@import 'pdfjs-dist/web/pdf_viewer.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -27,6 +29,145 @@
 
   ::-webkit-scrollbar-thumb {
     @apply bg-gray-300 rounded-full hover:bg-gray-400 transition-colors;
+  }
+}
+
+/* PDF editor */
+.pdf-editor-frame {
+  @apply relative mx-auto flex h-[calc(100vh-7rem)] min-h-[620px] max-w-[1800px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white;
+}
+
+.pdf-editor-header {
+  @apply flex min-h-16 items-center gap-3 border-b border-gray-200 bg-white px-3 sm:px-5;
+}
+
+.pdf-editor-commandbar {
+  @apply flex min-h-12 items-center justify-between border-b border-gray-200 bg-gray-50 px-3 sm:pl-24 sm:pr-[19rem];
+}
+
+.pdf-editor-body {
+  @apply relative flex min-h-0 flex-1 overflow-hidden;
+}
+
+.pdf-editor-toolrail {
+  @apply absolute bottom-3 left-3 right-3 z-40 flex h-16 items-center gap-1 overflow-x-auto rounded-2xl border border-gray-200 bg-white p-1.5 sm:bottom-auto sm:right-auto sm:top-[7.2rem] sm:h-[calc(100%-8rem)] sm:w-20 sm:flex-col sm:rounded-xl;
+}
+
+.pdf-tool-button {
+  @apply flex min-w-14 flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-1.5 text-[11px] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 sm:w-full;
+}
+
+.pdf-tool-button svg {
+  @apply h-5 w-5;
+}
+
+.pdf-tool-button.active {
+  @apply bg-primary-50 text-primary-700 ring-1 ring-primary-200;
+}
+
+.pdf-icon-button {
+  @apply inline-flex h-9 w-9 flex-none items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30 disabled:cursor-not-allowed disabled:opacity-30;
+}
+
+.pdf-icon-button svg {
+  @apply h-5 w-5;
+}
+
+.pdf-editor-pages {
+  @apply flex min-w-0 flex-1 flex-col items-center gap-8 overflow-auto bg-gray-200 px-3 pb-24 pt-8 sm:pl-24 sm:pr-[20rem];
+  scroll-padding-top: 2rem;
+}
+
+.pdf-page-shell {
+  @apply relative flex-none overflow-hidden bg-white outline outline-1 outline-gray-300;
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.12);
+}
+
+.pdf-page-shell:focus-within,
+.pdf-page-shell:hover {
+  @apply outline-2 outline-primary-400;
+}
+
+.pdf-page-shell.active {
+  @apply outline-2 outline-primary-600;
+}
+
+.pdf-page-number {
+  @apply pointer-events-none absolute bottom-2 right-2 z-30 rounded-md bg-gray-900/75 px-2 py-1 text-xs font-semibold text-white;
+}
+
+.pdf-editor-text-layer {
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pdf-editor-text-layer.is-selecting {
+  pointer-events: auto;
+  cursor: text;
+}
+
+.pdf-page-shell .canvas-container {
+  position: absolute !important;
+  inset: 0;
+  z-index: 3;
+}
+
+.pdf-page-shell:has(.pdf-editor-text-layer.is-selecting) .upper-canvas {
+  pointer-events: none !important;
+}
+
+.pdf-editor-inspector {
+  @apply absolute bottom-[5.3rem] right-3 z-40 max-h-[60vh] w-[min(19rem,calc(100%-1.5rem))] overflow-y-auto rounded-2xl border border-gray-200 bg-white p-5 sm:bottom-0 sm:right-0 sm:top-0 sm:max-h-none sm:w-80 sm:rounded-none sm:border-y-0 sm:border-r-0;
+}
+
+.pdf-editor-inspector h2 {
+  @apply text-lg font-bold;
+}
+
+.pdf-property-field {
+  @apply block text-sm font-medium text-gray-700;
+}
+
+.pdf-property-field input,
+.pdf-property-field select,
+.pdf-property-field textarea {
+  @apply mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20;
+}
+
+.pdf-property-field input[type='range'] {
+  @apply px-0;
+}
+
+.pdf-property-label {
+  @apply flex items-center justify-between gap-3 text-sm font-medium text-gray-700;
+}
+
+.pdf-property-label input[type='color'] {
+  @apply h-8 w-12 cursor-pointer rounded-md border border-gray-200 bg-white p-1;
+}
+
+.pdf-style-toggle {
+  @apply rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50;
+}
+
+.pdf-style-toggle.active {
+  @apply border-primary-300 bg-primary-50 text-primary-700;
+}
+
+@media (max-width: 639px) {
+  .pdf-editor-inspector {
+    display: none;
+  }
+
+  .pdf-editor-inspector:has(.pdf-property-field),
+  .pdf-editor-inspector:has(.pdf-style-toggle) {
+    display: block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdf-editor-pages {
+    scroll-behavior: auto;
   }
 }
 

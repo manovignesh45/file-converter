@@ -2,6 +2,16 @@
 const nextConfig = {
   // Use standalone output to avoid trace collection issues
   output: 'standalone',
+
+  webpack(config) {
+    // PDF.js's unminified build declares __webpack_exports__, which collides
+    // with Next 15's Webpack 5.98 eval wrapper before getDocument can run.
+    // The minified build renames those internals. Match only the package root
+    // so both editor imports are fixed without affecting CSS or worker paths.
+    // https://github.com/webpack/webpack/issues/20095
+    config.resolve.alias['pdfjs-dist$'] = require.resolve('pdfjs-dist/build/pdf.min.mjs')
+    return config
+  },
   
   // Configure external domains if needed
   images: {
@@ -44,7 +54,7 @@ const nextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';"
+            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';"
           }
         ],
       },
@@ -57,7 +67,7 @@ const nextConfig = {
           },
           {
             key: 'Access-Control-Allow-Methods',
-            value: 'GET, POST, OPTIONS'
+            value: 'GET, POST, DELETE, OPTIONS'
           },
           {
             key: 'Access-Control-Allow-Headers',

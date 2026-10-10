@@ -1,4 +1,4 @@
-import sharp from 'sharp'
+import sharp, { type ResizeOptions as SharpResizeOptions } from 'sharp'
 import { v4 as uuidv4 } from 'uuid'
 import path from 'path'
 import fs from 'fs/promises'
@@ -68,7 +68,7 @@ export class ImageResizeService {
 
     // Apply resize
     if (options.width || options.height) {
-      const resizeOptions: sharp.ResizeOptions = {
+      const resizeOptions: SharpResizeOptions = {
         width: options.width,
         height: options.height,
       }

@@ -9,7 +9,7 @@ export interface ImageFile {
 }
 
 export interface ConversionOptions {
-  operation: 'compress' | 'resize' | 'convert' | 'pdf' | 'watermark' | 'pdf-compress' | 'pdf-remove-password'
+  operation: 'compress' | 'resize' | 'convert' | 'pdf' | 'watermark' | 'pdf-compress' | 'pdf-remove-password' | 'pdf-edit'
   compressionQuality?: number
   targetSize?: number
   targetSizeUnit?: 'KB' | 'MB'
