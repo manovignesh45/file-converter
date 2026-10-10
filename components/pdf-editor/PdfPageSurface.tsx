@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   Canvas,
   Ellipse,
@@ -88,17 +88,40 @@ export default function PdfPageSurface({
   onModify,
 }: PdfPageSurfaceProps) {
   const backgroundRef = useRef<HTMLCanvasElement>(null)
+  const shellRef = useRef<HTMLElement>(null)
+  const [renderVisible, setRenderVisible] = useState(pageIndex === 0)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const textLayerRef = useRef<HTMLDivElement>(null)
   const fabricRef = useRef<Canvas | null>(null)
+  const selectedIdRef = useRef(selectedId)
+  selectedIdRef.current = selectedId
   const drawingPointsRef = useRef<PdfPoint[] | null>(null)
   const temporaryDrawingRef = useRef<Polyline | null>(null)
   const highlightStartRef = useRef<{ x: number; y: number } | null>(null)
   const viewport = useMemo(() => page.getViewport({ scale: zoom }), [page, zoom])
 
   useEffect(() => {
+    const shell = shellRef.current
+    if (!shell || renderVisible) return
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0]?.isIntersecting) { setRenderVisible(true); observer.disconnect() }
+    }, { rootMargin: '800px' })
+    observer.observe(shell)
+    return () => observer.disconnect()
+  }, [renderVisible])
+
+  useEffect(() => {
+    const canvas = fabricRef.current
+    if (!canvas || !renderVisible) return
+    const selected = selectedId ? canvas.getObjects().find(object => (object as { data?: { id?: string } }).data?.id === selectedId) : undefined
+    if (selected && canvas.getActiveObject() !== selected) canvas.setActiveObject(selected)
+    if (!selected && canvas.getActiveObject()) canvas.discardActiveObject()
+    canvas.requestRenderAll()
+  }, [renderVisible, selectedId])
+
+  useEffect(() => {
     const canvas = backgroundRef.current
-    if (!canvas) return
+    if (!canvas || !renderVisible) return
     const outputScale = Math.min(window.devicePixelRatio || 1, 2)
     canvas.width = Math.floor(viewport.width * outputScale)
     canvas.height = Math.floor(viewport.height * outputScale)
@@ -119,11 +142,11 @@ export default function PdfPageSurface({
       }
     })
     return () => task.cancel()
-  }, [page, viewport])
+  }, [page, renderVisible, viewport])
 
   useEffect(() => {
     const container = textLayerRef.current
-    if (!container) return
+    if (!container || !renderVisible) return
     container.replaceChildren()
     let cancelled = false
     let textLayer: { render: () => Promise<unknown>; cancel: () => void } | null = null
@@ -140,20 +163,23 @@ export default function PdfPageSurface({
       cancelled = true
       textLayer?.cancel()
     }
-  }, [page, viewport])
+  }, [page, renderVisible, viewport])
 
   useEffect(() => {
     const element = overlayRef.current
-    if (!element) return
+    if (!element || !renderVisible) return
     const canvas = new Canvas(element, {
       width: viewport.width,
       height: viewport.height,
-      selection: tool === 'select',
+      // Object selection stays available; group transforms need a document-level
+      // multi-selection command before they can be committed safely.
+      selection: false,
       preserveObjectStacking: true,
     })
     fabricRef.current = canvas
 
     const scale = viewportScale(viewport)
+    let disposed = false
     const addObjects = async () => {
       for (const editorElement of [...elements].sort((a, b) => a.zIndex - b.zIndex)) {
         const base = objectOptions(editorElement, viewport)
@@ -176,6 +202,7 @@ export default function PdfPageSurface({
             const url = assetUrls[editorElement.assetId]
             if (!url) continue
             object = await FabricImage.fromURL(url, {}, base)
+            if (disposed) return
             object.set({
               scaleX: (editorElement.width * scale) / Math.max(1, object.width),
               scaleY: (editorElement.height * scale) / Math.max(1, object.height),
@@ -244,16 +271,16 @@ export default function PdfPageSurface({
         if (!object) continue
         object.set({ selectable: tool === 'select', evented: tool === 'select' })
         canvas.add(object)
-        if (editorElement.id === selectedId) canvas.setActiveObject(object)
+        if (editorElement.id === selectedIdRef.current) canvas.setActiveObject(object)
       }
       canvas.requestRenderAll()
     }
     void addObjects()
 
-    const selectionHandler = (event: any) => onSelect(event.selected?.[0]?.data?.id || null)
+    const selectionHandler = (event: any) => { if (!disposed) onSelect(event.selected?.[0]?.data?.id || null) }
     canvas.on('selection:created', selectionHandler)
     canvas.on('selection:updated', selectionHandler)
-    canvas.on('selection:cleared', () => onSelect(null))
+    canvas.on('selection:cleared', () => { if (!disposed) onSelect(null) })
     canvas.on('object:modified', (event: any) => {
       const object = event.target
       const id = object?.data?.id
@@ -268,9 +295,11 @@ export default function PdfPageSurface({
         })
         onModify({ ...original, ...elementBounds({ ...original, points }), points, rotation: 0 })
       } else {
-        const pdfOrigin = viewportToPdf({ x: object.left || 0, y: object.top || 0 }, viewport)
         const width = Math.max(1, object.getScaledWidth() / scale)
         const height = Math.max(1, object.getScaledHeight() / scale)
+        const pdfOrigin = viewportToPdf({ x: object.left || 0, y: object.top || 0 }, viewport)
+        // Ellipses use a center Y origin in Fabric; the document anchor is lower left.
+        if (original.type === 'ellipse') pdfOrigin.y -= height / 2
         const rotation = normalizeDegrees((object.angle || 0) - viewportRotation(viewport))
         const textChanges = original.type === 'text'
           ? { fontSize: Math.max(4, Math.min(500, original.fontSize * Math.abs(object.scaleY || 1))) }
@@ -313,10 +342,11 @@ export default function PdfPageSurface({
     })
 
     return () => {
+      disposed = true
       fabricRef.current = null
       void canvas.dispose()
     }
-  }, [assetUrls, drawColor, drawWidth, elements, onActivate, onAddAt, onAddDrawing, onModify, onSelect, pageIndex, selectedId, tool, viewport])
+  }, [assetUrls, drawColor, drawWidth, elements, onActivate, onAddAt, onAddDrawing, onModify, onSelect, pageIndex, renderVisible, tool, viewport])
 
   const finishHighlight = (pointerEvent: ReactPointerEvent<HTMLDivElement>) => {
     const container = textLayerRef.current
@@ -355,6 +385,7 @@ export default function PdfPageSurface({
 
   return (
     <section
+      ref={shellRef}
       className={`pdf-page-shell ${active ? 'active' : ''}`}
       data-page-index={pageIndex}
       style={{ width: viewport.width, height: viewport.height }}

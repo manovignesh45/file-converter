@@ -18,6 +18,8 @@ export interface PdfPoint {
 
 interface PdfElementBase {
   id: string
+  /** Stable editor page identity; pageIndex remains the legacy export coordinate. */
+  pageId?: string
   pageIndex: number
   zIndex: number
   x: number
@@ -83,6 +85,19 @@ export interface PdfPageInfo {
   width: number
   height: number
   rotation: number
+}
+
+export interface PdfDocumentPage extends PdfPageInfo {
+  id: string
+  sourcePageIndex: number
+  bounds: [number, number, number, number]
+}
+
+export interface PdfEditorDocument {
+  id: string
+  name: string
+  pages: PdfDocumentPage[]
+  elements: PdfEditorElement[]
 }
 
 export interface PdfEditPayload {

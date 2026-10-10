@@ -2,20 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api'
-import { ChevronLeft, ChevronRight, Download, FileText, LoaderCircle, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, FileText, LoaderCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, X } from 'lucide-react'
 import PdfEditorToolbar from './PdfEditorToolbar'
 import PdfEditorInspector from './PdfEditorInspector'
 import PdfPageSurface from './PdfPageSurface'
+import PdfThumbnailSidebar from './PdfThumbnailSidebar'
 import { commitHistory, createHistory, redoHistory, undoHistory } from '../../lib/pdf/history'
+import { cloneElementToPage, createDocumentPage, createEditorDocument, moveElementBy, sourcePageId, toLegacyExportPayload } from '../../lib/pdf/document'
 import { hasSupportedImageSignature, MAX_IMAGE_BYTES } from '../../lib/pdf/validation'
 import type {
   PdfAssetMap,
   PdfDrawingElement,
-  PdfEditPayload,
+  PdfEditorDocument,
   PdfEditorElement,
   PdfEditorTool,
   PdfHighlightElement,
-  PdfPageInfo,
+  PdfDocumentPage,
   PdfPoint,
 } from '../../types/pdfEditor'
 
@@ -28,8 +30,7 @@ interface PdfEditorProps {
 
 export default function PdfEditor({ file, initialPassword = '', onCancel, onExported }: PdfEditorProps) {
   const [pages, setPages] = useState<PDFPageProxy[]>([])
-  const [pageInfo, setPageInfo] = useState<PdfPageInfo[]>([])
-  const [history, setHistory] = useState(() => createHistory<PdfEditorElement[]>([]))
+  const [history, setHistory] = useState(() => createHistory<PdfEditorDocument>(createEditorDocument(crypto.randomUUID(), file.name)))
   const [assets, setAssets] = useState<PdfAssetMap>({})
   const [assetUrls, setAssetUrls] = useState<Record<string, string>>({})
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -45,12 +46,20 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
   const [drawColor, setDrawColor] = useState('#1e293b')
   const [drawWidth, setDrawWidth] = useState(3)
   const [highlightColor, setHighlightColor] = useState('#fde047')
+  const [mode, setMode] = useState<'edit' | 'fill'>('edit')
+  const [showThumbnails, setShowThumbnails] = useState(true)
+  const [showInspector, setShowInspector] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const replaceImageInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const assetUrlsRef = useRef<Record<string, string>>({})
+  const clipboardRef = useRef<PdfEditorElement | null>(null)
 
-  const elements = history.present
+  const document = history.present
+  const elements = document.elements
+  const pageInfo = document.pages
   const selectedElement = elements.find(element => element.id === selectedId) || null
+  const elementsByPage = useMemo(() => pages.map((_, index) => elements.filter(element => element.pageId ? element.pageId === sourcePageId(index) : element.pageIndex === index)), [elements, pages])
 
   useEffect(() => {
     let cancelled = false
@@ -75,20 +84,20 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
         }
         const document = await task.promise
         const loadedPages: PDFPageProxy[] = []
-        const info: PdfPageInfo[] = []
+        const info: PdfDocumentPage[] = []
         for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
           const page = await document.getPage(pageNumber)
           loadedPages.push(page)
-          info.push({
+          info.push(createDocumentPage({
             pageIndex: pageNumber - 1,
             width: page.view[2] - page.view[0],
             height: page.view[3] - page.view[1],
             rotation: page.rotate,
-          })
+          }, [page.view[0], page.view[1], page.view[2], page.view[3]]))
         }
         if (!cancelled) {
           setPages(loadedPages)
-          setPageInfo(info)
+          setHistory(current => ({ ...current, present: { ...current.present, pages: info } }))
           setNeedsPassword(false)
           setLoading(false)
         }
@@ -129,18 +138,21 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
   }, [pages.length, zoom])
 
   const commit = useCallback((next: PdfEditorElement[]) => {
-    setHistory(current => commitHistory(current, next))
+    setHistory(current => commitHistory(current, { ...current.present, elements: next }))
   }, [])
 
   const addElements = useCallback((newElements: PdfEditorElement[]) => {
     setHistory(current => {
-      const nextZ = current.present.reduce((maximum, item) => Math.max(maximum, item.zIndex), -1) + 1
-      const prepared = newElements.map((element, index) => ({ ...element, zIndex: nextZ + index }))
-      return commitHistory(current, [...current.present, ...prepared])
+      const nextZ = current.present.elements.reduce((maximum, item) => Math.max(maximum, item.zIndex), -1) + 1
+      const prepared = newElements.map((element, index) => ({ ...element, pageId: element.pageId ?? sourcePageId(element.pageIndex), zIndex: nextZ + index }))
+      return commitHistory(current, { ...current.present, elements: [...current.present.elements, ...prepared] })
     })
     setSelectedId(newElements.at(-1)?.id || null)
     setTool('select')
   }, [])
+
+  const addDrawing = useCallback((element: PdfDrawingElement) => addElements([element]), [addElements])
+  const addHighlights = useCallback((items: PdfHighlightElement[]) => addElements(items), [addElements])
 
   const addAt = useCallback((pageIndex: number, point: PdfPoint) => {
     const common = { id: crypto.randomUUID(), pageIndex, zIndex: 0, x: point.x, y: point.y, rotation: 0, opacity: 1 }
@@ -152,7 +164,7 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
   }, [addElements, tool])
 
   const modifyElement = useCallback((updated: PdfEditorElement) => {
-    setHistory(current => commitHistory(current, current.present.map(element => element.id === updated.id ? updated : element)))
+    setHistory(current => commitHistory(current, { ...current.present, elements: current.present.elements.map(element => element.id === updated.id ? updated : element) }))
   }, [])
 
   const deleteSelected = useCallback(() => {
@@ -160,6 +172,11 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     commit(elements.filter(element => element.id !== selectedId))
     setSelectedId(null)
   }, [commit, elements, selectedId])
+
+  const duplicateSelected = useCallback(() => {
+    if (!selectedElement) return
+    addElements([cloneElementToPage(selectedElement, crypto.randomUUID(), selectedElement.pageIndex)])
+  }, [addElements, selectedElement])
 
   const reorderSelected = useCallback((direction: 'forward' | 'backward') => {
     if (!selectedId) return
@@ -175,13 +192,29 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement
       const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
+      if (event.isComposing || isTyping) return
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault()
         setHistory(current => event.shiftKey ? redoHistory(current) : undoHistory(current))
         setSelectedId(null)
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && selectedElement) {
+        if (window.getSelection()?.toString()) return
+        event.preventDefault()
+        clipboardRef.current = { ...selectedElement }
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v' && clipboardRef.current) {
+        event.preventDefault()
+        const source = clipboardRef.current
+        addElements([cloneElementToPage(source, crypto.randomUUID(), activePage)])
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd' && selectedElement) {
+        event.preventDefault()
+        duplicateSelected()
       } else if (!isTyping && (event.key === 'Delete' || event.key === 'Backspace')) {
         event.preventDefault()
         deleteSelected()
+      } else if (selectedElement && !event.ctrlKey && !event.metaKey && !event.altKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+        event.preventDefault()
+        const distance = event.shiftKey ? 10 : 1
+        modifyElement(moveElementBy(selectedElement, event.key === 'ArrowRight' ? distance : event.key === 'ArrowLeft' ? -distance : 0, event.key === 'ArrowUp' ? distance : event.key === 'ArrowDown' ? -distance : 0))
       } else if (!isTyping && event.key === 'Escape') {
         setTool('select')
         setSelectedId(null)
@@ -189,9 +222,9 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [deleteSelected])
+  }, [activePage, addElements, deleteSelected, duplicateSelected, modifyElement, selectedElement])
 
-  const chooseImage = async (chosen: File | undefined) => {
+  const chooseImage = async (chosen: File | undefined, replace = false) => {
     if (!chosen) return
     if (chosen.size === 0 || chosen.size > MAX_IMAGE_BYTES) {
       setError('Images must be non-empty and no larger than 50 MB.')
@@ -217,6 +250,10 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     }
     setAssets(current => ({ ...current, [assetId]: chosen }))
     setAssetUrls(current => ({ ...current, [assetId]: url }))
+    if (replace && selectedElement?.type === 'image') {
+      modifyElement({ ...selectedElement, assetId, mimeType: signature })
+      return
+    }
     const info = pageInfo[activePage]
     addElements([{
       id: crypto.randomUUID(), type: 'image', pageIndex: activePage, zIndex: 0,
@@ -235,9 +272,9 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     setExporting(true)
     setError(null)
     try {
-      const payload: PdfEditPayload = { version: 1, pages: pageInfo, elements }
+      const payload = toLegacyExportPayload(document)
       const formData = new FormData()
-      formData.append('pdf', file)
+      formData.append('pdf', file, document.name)
       formData.append('edits', JSON.stringify(payload))
       if (password) formData.append('password', password)
       const usedAssetIds = Array.from(new Set(elements.filter(element => element.type === 'image').map(element => element.assetId)))
@@ -279,7 +316,7 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     <div className="pdf-editor-frame">
       <header className="pdf-editor-header">
         <button className="pdf-icon-button" onClick={onCancel} title="Close editor"><X /></button>
-        <div className="min-w-0 flex-1"><h1 className="truncate text-base font-bold text-gray-900">{file.name}</h1><p className="text-xs text-gray-500">{pages.length} page{pages.length === 1 ? '' : 's'} · original text is read-only</p></div>
+        <div className="min-w-0 flex-1"><input key={document.id} className="w-full truncate rounded border border-transparent bg-transparent text-base font-bold text-gray-900 hover:border-gray-200 focus:border-primary-500 focus:outline-none" aria-label="Document name" defaultValue={document.name} onBlur={event => { const name = event.target.value.trim(); if (name && name !== document.name) setHistory(current => commitHistory(current, { ...current.present, name })) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /><p className="text-xs text-gray-500">Session only · export sends the PDF to the server</p></div>
         <div className="flex items-center gap-1">
           <button className="pdf-icon-button" onClick={() => goToPage(activePage - 1)} disabled={activePage === 0}><ChevronLeft /></button>
           <span className="min-w-20 text-center text-sm font-semibold">{activePage + 1} / {pages.length}</span>
@@ -291,40 +328,53 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
         </button>
       </header>
 
+      <nav className="pdf-editor-modes" aria-label="Editor mode">
+        <button className={mode === 'edit' ? 'active' : ''} aria-current={mode === 'edit' ? 'page' : undefined} onClick={() => setMode('edit')}>Edit PDF</button>
+        <button className={mode === 'fill' ? 'active' : ''} aria-current={mode === 'fill' ? 'page' : undefined} onClick={() => { setMode('fill'); setTool('select') }}>Fill &amp; Sign</button>
+        <span className="ml-auto text-xs text-gray-500">Original PDF text is read-only</span>
+      </nav>
+
       {error && <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>}
 
-      <PdfEditorToolbar
-        tool={tool} onToolChange={setTool} onImageRequest={() => imageInputRef.current?.click()}
+      {mode === 'edit' && <PdfEditorToolbar
+        tool={tool} onToolChange={setTool} onImageRequest={() => imageInputRef.current?.click()} onReplaceImage={() => replaceImageInputRef.current?.click()}
         zoom={zoom} onZoomChange={setZoom}
         onUndo={() => { setHistory(current => undoHistory(current)); setSelectedId(null) }}
         onRedo={() => { setHistory(current => redoHistory(current)); setSelectedId(null) }}
         canUndo={history.past.length > 0} canRedo={history.future.length > 0}
-        onDelete={deleteSelected} canDelete={Boolean(selectedElement)} onReorder={reorderSelected}
-      />
+        onDelete={deleteSelected} onDuplicate={duplicateSelected} onReorder={reorderSelected}
+        selectedElement={selectedElement} onElementChange={modifyElement} onAdvanced={() => setShowInspector(true)}
+      />}
 
       <input ref={imageInputRef} className="hidden" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={event => { void chooseImage(event.target.files?.[0]); event.target.value = '' }} />
+      <input ref={replaceImageInputRef} className="hidden" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={event => { void chooseImage(event.target.files?.[0], true); event.target.value = '' }} />
 
       <div className="pdf-editor-body">
+        {showThumbnails && <PdfThumbnailSidebar pages={pages} activePage={activePage} onSelect={goToPage} />}
+        <button className="pdf-sidebar-toggle" onClick={() => setShowThumbnails(value => !value)} aria-label={showThumbnails ? 'Hide page thumbnails' : 'Show page thumbnails'} title={showThumbnails ? 'Hide page thumbnails' : 'Show page thumbnails'}>{showThumbnails ? <PanelLeftClose /> : <PanelLeftOpen />}</button>
         <div ref={scrollRef} className="pdf-editor-pages">
           {pages.map((page, pageIndex) => (
             <PdfPageSurface
               key={pageIndex} page={page} pageIndex={pageIndex} active={activePage === pageIndex} zoom={zoom}
-              elements={elements.filter(element => element.pageIndex === pageIndex)}
+              elements={elementsByPage[pageIndex]}
               selectedId={selectedId} tool={tool} assetUrls={assetUrls}
               drawColor={drawColor} drawWidth={drawWidth} highlightColor={highlightColor}
               onActivate={setActivePage} onSelect={setSelectedId} onAddAt={addAt}
-              onAddDrawing={(element: PdfDrawingElement) => addElements([element])}
-              onAddHighlights={(items: PdfHighlightElement[]) => addElements(items)}
+              onAddDrawing={addDrawing}
+              onAddHighlights={addHighlights}
               onModify={modifyElement}
             />
           ))}
         </div>
-        <PdfEditorInspector
+        {mode === 'fill' && <aside className="pdf-fill-panel"><h2>Fill &amp; Sign</h2><p>Reusable fields and signatures arrive in Phase 2. Your document edits stay here when you switch modes.</p><button className="btn-secondary mt-4" onClick={() => setMode('edit')}>Return to Edit PDF</button></aside>}
+        {mode === 'edit' && showInspector && <PdfEditorInspector
           element={selectedElement} onChange={modifyElement}
           drawColor={drawColor} drawWidth={drawWidth} highlightColor={highlightColor}
           onDefaultsChange={values => { if (values.drawColor) setDrawColor(values.drawColor); if (values.drawWidth) setDrawWidth(values.drawWidth); if (values.highlightColor) setHighlightColor(values.highlightColor) }}
-        />
+        />}
+        {mode === 'edit' && <button className="pdf-inspector-toggle" onClick={() => setShowInspector(value => !value)} aria-label={showInspector ? 'Hide properties' : 'Show properties'} title={showInspector ? 'Hide properties' : 'Show properties'}>{showInspector ? <PanelRightClose /> : <PanelRightOpen />}</button>}
       </div>
+      <footer className="pdf-editor-status"><span>Page {activePage + 1} of {pages.length}</span><span>Zoom {Math.round(zoom * 100)}%</span><span>Unsaved session</span></footer>
     </div>
   )
 }

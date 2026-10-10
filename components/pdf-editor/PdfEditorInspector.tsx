@@ -91,7 +91,7 @@ export default function PdfEditorInspector({
           <input type="range" min="0.05" max="1" step="0.05" value={element.opacity} onChange={event => update({ opacity: Number(event.target.value) })} />
           <span className="text-xs text-gray-500">{Math.round(element.opacity * 100)}%</span>
         </label>
-        <label className="pdf-property-field">Rotation<input type="number" min="-360" max="360" value={Math.round(element.rotation)} onChange={event => update({ rotation: Number(event.target.value) })} /></label>
+        {element.type !== 'drawing' && element.type !== 'highlight' && <label className="pdf-property-field">Rotation<input type="number" min="-360" max="360" value={Math.round(element.rotation)} onChange={event => update({ rotation: Number(event.target.value) })} /></label>}
       </div>
     </aside>
   )
