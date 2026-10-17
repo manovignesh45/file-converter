@@ -255,7 +255,7 @@ export default function Home() {
                       onOptionsChange={handleOptionsChange}
                       onProcess={handleProcess}
                       canProcess={canProcess()}
-                      images={images}
+                      images={hasIncompatibleFiles ? [] : images}
                       lockOperation
                     />
                   </div>
