@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import type { PdfFieldDefinition } from '../../types/pdfFields'
 import { fieldDisplayValue, isTextualField } from '../../lib/pdf/fields'
 import type { PdfPoint } from '../../types/pdfEditor'
@@ -11,6 +11,9 @@ interface Props {
   fields: PdfFieldDefinition[]
   activeFieldId: string | null
   focusFieldId: string | null
+  width: number
+  onWidthChange: (width: number) => void
+  thumbnailsOpen: boolean
   onSelectField: (id: string) => void
   onDragFieldStart: () => void
   onLocateField: (id: string, clientX: number, clientY: number) => DragLocation | null
@@ -33,7 +36,8 @@ interface Props {
   savedSignatureIds: string[]
 }
 
-export default function QuickFillPanel({ fields, activeFieldId, focusFieldId, onSelectField, onDragFieldStart, onLocateField, onDropField, onChangeField, onCreateText, onCreateCommon, onCreateMark, onAddImage, onRemoveField, onRenameField, onMoveField, scope, onScopeChange, selectedPages, onTogglePage, pageCount, onCreateSignature, signatureUrls, savedSignatureIds }: Props) {
+export default function QuickFillPanel({ fields, activeFieldId, focusFieldId, width, onWidthChange, thumbnailsOpen, onSelectField, onDragFieldStart, onLocateField, onDropField, onChangeField, onCreateText, onCreateCommon, onCreateMark, onAddImage, onRemoveField, onRenameField, onMoveField, scope, onScopeChange, selectedPages, onTogglePage, pageCount, onCreateSignature, signatureUrls, savedSignatureIds }: Props) {
+  const panelRef = useRef<HTMLElement>(null)
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const labelInputRef = useRef<HTMLInputElement>(null)
@@ -41,6 +45,7 @@ export default function QuickFillPanel({ fields, activeFieldId, focusFieldId, on
   const [search, setSearch] = useState('')
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null)
   const [fileDropTarget, setFileDropTarget] = useState<'image' | 'signature' | null>(null)
+  const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; lastWidth: number; min: number; max: number } | null>(null)
   const dragGestureRef = useRef<{ field: PdfFieldDefinition; pointerId: number; startX: number; startY: number; started: boolean } | null>(null)
   const suppressClickRef = useRef(false)
   const clearDragPreview = () => {
@@ -142,8 +147,43 @@ export default function QuickFillPanel({ fields, activeFieldId, focusFieldId, on
   const leaveFileTarget = (event: ReactDragEvent<HTMLButtonElement>) => {
     if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setFileDropTarget(null)
   }
+  const widthBounds = () => {
+    const bodyWidth = panelRef.current?.parentElement?.getBoundingClientRect().width ?? window.innerWidth
+    const mobile = window.matchMedia('(max-width: 767px)').matches
+    const thumbnailWidth = mobile || !thumbnailsOpen ? 0 : panelRef.current?.parentElement?.querySelector('.pdf-thumbnail-sidebar')?.getBoundingClientRect().width ?? 0
+    const max = Math.max(1, Math.floor(Math.min(928, mobile ? bodyWidth * 0.92 : bodyWidth - thumbnailWidth - 320)))
+    return { min: Math.min(288, max), max }
+  }
+  const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !panelRef.current) return
+    event.preventDefault()
+    const startWidth = panelRef.current.getBoundingClientRect().width
+    resizeRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth, lastWidth: startWidth, ...widthBounds() }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  const moveResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = resizeRef.current
+    if (!resize || resize.pointerId !== event.pointerId || !panelRef.current) return
+    const next = Math.round(Math.max(resize.min, Math.min(resize.max, resize.startWidth + resize.startX - event.clientX)))
+    resize.lastWidth = next
+    panelRef.current.style.width = `${next}px`
+  }
+  const endResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = resizeRef.current
+    if (!resize || resize.pointerId !== event.pointerId) return
+    resizeRef.current = null
+    onWidthChange(resize.lastWidth)
+  }
+  const resizeWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const delta = event.key === 'ArrowLeft' ? 32 : event.key === 'ArrowRight' ? -32 : 0
+    if (!delta || !panelRef.current) return
+    event.preventDefault()
+    const { min, max } = widthBounds()
+    onWidthChange(Math.round(Math.max(min, Math.min(max, panelRef.current.getBoundingClientRect().width + delta))))
+  }
 
-  return <aside id="pdf-quick-fill" className="pdf-fill-panel" aria-label="Quick Fill">
+  return <aside ref={panelRef} id="pdf-quick-fill" className="pdf-fill-panel" data-thumbnails={thumbnailsOpen ? 'open' : 'closed'} style={{ width }} aria-label="Quick Fill">
+    <div className="pdf-fill-resize-handle" role="separator" aria-label="Resize Quick Fill" aria-orientation="vertical" aria-valuemin={288} aria-valuemax={928} aria-valuenow={width} tabIndex={0} title="Drag to resize Quick Fill" onPointerDown={startResize} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} onKeyDown={resizeWithKeyboard} onDoubleClick={() => onWidthChange(288)}><span aria-hidden="true">⋮</span></div>
     <h2>Quick Fill</h2>
     {activeFieldId && <p className="mb-3 rounded-lg bg-primary-50 px-3 py-2 text-xs text-primary-800" role="status">Click a page to place {fields.find(field => field.id === activeFieldId)?.label || 'this item'}. Press Escape to cancel.</p>}
     <p className="mb-3">Keep values here while editing this PDF. Click a card and then a page, or drag a card onto a page. Adjust the placed item there.</p>
@@ -163,7 +203,7 @@ export default function QuickFillPanel({ fields, activeFieldId, focusFieldId, on
     {fields.length > 4 && <input className="mb-3" type="search" aria-label="Search Quick Fill items" placeholder="Search items" value={search} onChange={event => setSearch(event.target.value)} />}
     {!fields.length && <p className="rounded-lg border border-dashed border-gray-300 p-3 text-sm">Add a text value, image, or signature to get started.</p>}
     {fields.length > 0 && filteredFields.length === 0 && <p className="text-sm">No matching items.</p>}
-    <div className="space-y-3">
+    <div className="pdf-fill-grid">
       {filteredFields.map(field => <div key={field.id} className={`pdf-field-card ${activeFieldId === field.id ? 'active' : ''}`} role="button" tabIndex={0} aria-label={`Place ${field.label}`} aria-pressed={activeFieldId === field.id}
         onClick={event => { if (suppressClickRef.current) { event.preventDefault(); return }; if (!(event.target as HTMLElement).closest('input, textarea, select, button')) onSelectField(field.id) }}
         onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onSelectField(field.id) } }}

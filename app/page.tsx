@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import DragDropUploader from '../components/DragDropUploader'
 import OptionsPanel from '../components/OptionsPanel'
 import ProgressModal from '../components/ProgressModal'
@@ -27,6 +27,19 @@ export default function Home() {
   }>>([])
   const [isCleaningUp, setIsCleaningUp] = useState(false)
   const [editorFile, setEditorFile] = useState<File | null>(null)
+
+  useEffect(() => {
+    if (!editorFile) return
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    const previousBodyOverflow = document.body.style.overflow
+    window.scrollTo(0, 0)
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow
+      document.body.style.overflow = previousBodyOverflow
+    }
+  }, [editorFile])
 
   const handleImagesChange = useCallback((newImages: ImageFile[]) => {
     setImages(newImages)
@@ -144,11 +157,11 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen pb-20">
+    <main className={editorFile ? 'pdf-editor-page' : 'min-h-screen pb-20'}>
       <Header />
 
       {editorFile ? (
-        <div className="px-2 pb-4 pt-24 sm:px-4">
+        <div className="box-border h-full px-2 pb-4 pt-24 sm:px-4">
           <PdfEditor
             file={editorFile}
             initialPassword={options.pdfPassword}

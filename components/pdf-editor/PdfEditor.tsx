@@ -58,6 +58,7 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
   const [highlightColor, setHighlightColor] = useState('#fde047')
   const [showThumbnails, setShowThumbnails] = useState(true)
   const [showQuickFill, setShowQuickFill] = useState(true)
+  const [quickFillWidth, setQuickFillWidth] = useState(288)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [placementFieldId, setPlacementFieldId] = useState<string | null>(null)
   const [focusFieldId, setFocusFieldId] = useState<string | null>(null)
@@ -590,6 +591,7 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
         </div>
         {showQuickFill && <QuickFillPanel
           fields={document.fields} activeFieldId={placementFieldId} focusFieldId={focusFieldId}
+          width={quickFillWidth} onWidthChange={setQuickFillWidth} thumbnailsOpen={showThumbnails}
           onSelectField={id => { setTool('select'); setPlacementFieldId(current => current === id ? null : id) }}
           onDragFieldStart={() => { setTool('select'); setPlacementFieldId(null) }}
           onLocateField={locateDraggedField} onDropField={placeField} onChangeField={changeField}

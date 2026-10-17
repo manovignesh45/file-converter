@@ -35,6 +35,8 @@ Quick Fill now opens as an empty, session-only collection. Users can add and lab
 
 Image and Sign creation tiles accept a dropped PNG or JPEG as well as a click. Dropping onto Sign opens the signature upload dialog with the file previewed so the user can name it and choose browser storage. The dialog's upload area also accepts a dropped image. TypeScript, lint, and all 38 tests passed; live drag/drop verification remains pending.
 
+Quick Fill has a draggable divider on its left edge, with keyboard arrow support. Resizing the right panel automatically reflows field cards from one to as many as four columns as space permits; the chosen width stays set while the panel is toggled during the editor session. The panel reserves room for the PDF workspace and page thumbnails on desktop.
+
 ## 1. Findings and recommended direction
 
 The repository already has a usable overlay PDF editor. Preserve PDF.js for loading/rendering, Fabric for object interactions, and pdf-lib for export. The redesign should extend these modules incrementally.
