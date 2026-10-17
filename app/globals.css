@@ -81,6 +81,7 @@
 }
 
 .pdf-toolbar-color input { @apply h-8 w-9 cursor-pointer; }
+.pdf-toolbar-color input.pdf-toolbar-number { width: 4.5rem; min-width: 4.5rem; padding: 0.25rem 0.375rem; color: #0f172a; cursor: text; font-variant-numeric: tabular-nums; text-align: center; }
 .pdf-toolbar-opacity input { @apply w-16; }
 
 .pdf-editor-toolrail {

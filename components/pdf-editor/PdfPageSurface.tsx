@@ -22,6 +22,9 @@ import { clientToPdfPoint } from '../../lib/pdf/placement'
 import { browserTextLayout } from '../../lib/pdf/browserTextLayout'
 import type { PdfDrawingElement, PdfEditorElement, PdfEditorTool, PdfHighlightElement, PdfPoint, PdfTextElement } from '../../types/pdfEditor'
 
+// Keep thin marks easy to select without changing their visible or exported stroke.
+const STROKE_HIT_PADDING = 8
+
 interface PdfPageSurfaceProps {
   page: PDFPageProxy
   pageIndex: number
@@ -264,6 +267,7 @@ export default function PdfPageSurface({
               stroke: editorElement.strokeColor,
               strokeWidth: editorElement.strokeWidth * scale,
               strokeUniform: true,
+              padding: STROKE_HIT_PADDING,
             })
             break
           case 'checkmark':
@@ -273,14 +277,14 @@ export default function PdfPageSurface({
             const path = editorElement.type === 'checkmark'
               ? `M 0 ${h * 0.55} L ${w * 0.35} ${h} L ${w} 0`
               : `M 0 ${h} L ${w} 0 M 0 0 L ${w} ${h}`
-            object = new Path(path, { ...base, fill: 'transparent', stroke: editorElement.strokeColor, strokeWidth: editorElement.strokeWidth * scale, strokeUniform: true })
+            object = new Path(path, { ...base, fill: 'transparent', stroke: editorElement.strokeColor, strokeWidth: editorElement.strokeWidth * scale, strokeUniform: true, padding: STROKE_HIT_PADDING })
             break
           }
           case 'arrow': {
             const length = editorElement.width * scale
             const line = new Line([0, 0, length, 0], { stroke: editorElement.strokeColor, strokeWidth: editorElement.strokeWidth * scale, strokeUniform: true })
             const head = new Triangle({ left: length, top: 0, width: 12 * scale, height: 14 * scale, fill: editorElement.strokeColor, angle: 90, originX: 'center', originY: 'center' })
-            object = new Group([line, head], { ...base, originY: 'center' })
+            object = new Group([line, head], { ...base, originY: 'center', padding: STROKE_HIT_PADDING })
             break
           }
           case 'drawing': {
@@ -297,6 +301,7 @@ export default function PdfPageSurface({
               cornerColor: '#4f46e5',
               borderColor: '#4f46e5',
               cornerStyle: 'circle',
+              padding: STROKE_HIT_PADDING,
             })
             break
           }

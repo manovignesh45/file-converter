@@ -54,7 +54,7 @@ export default function PdfEditorToolbar({ tool, onToolChange, onImageRequest, o
         ))}
       </div>
       <div className="pdf-editor-context" aria-label="Selected object formatting">
-        {tool === 'draw' && <><label className="pdf-toolbar-color">Draw color <input aria-label="Drawing color" type="color" value={drawColor} onChange={event => onDefaultsChange({ drawColor: event.target.value })} /></label><label className="pdf-toolbar-color">Width <input aria-label="Drawing width" className="w-14" type="number" min="1" max="20" value={drawWidth} onChange={event => onDefaultsChange({ drawWidth: Number(event.target.value) })} /></label></>}
+        {tool === 'draw' && <><label className="pdf-toolbar-color">Draw color <input aria-label="Drawing color" type="color" value={drawColor} onChange={event => onDefaultsChange({ drawColor: event.target.value })} /></label><label className="pdf-toolbar-color">Width <input aria-label="Drawing width" className="pdf-toolbar-number" type="number" min="1" max="20" value={drawWidth} onChange={event => onDefaultsChange({ drawWidth: Number(event.target.value) })} /></label></>}
         {tool === 'highlight' && <label className="pdf-toolbar-color">Highlight color <input aria-label="Highlight color" type="color" value={highlightColor} onChange={event => onDefaultsChange({ highlightColor: event.target.value })} /></label>}
         {selectedElement?.type === 'text' && <>
           <select aria-label="Font family" value={selectedElement.fontFamily} onChange={event => update({ fontFamily: event.target.value as PdfFontFamily })}><option value="Helvetica">Helvetica</option><option value="TimesRoman">Times</option><option value="Courier">Courier</option><option value="NotoSans">Noto Sans</option></select>
@@ -64,7 +64,7 @@ export default function PdfEditorToolbar({ tool, onToolChange, onImageRequest, o
           <button className={`pdf-style-toggle underline ${selectedElement.underline ? 'active' : ''}`} aria-pressed={selectedElement.underline} onClick={() => update({ underline: !selectedElement.underline })}>U</button>
         </>}
         {color && <label className="pdf-toolbar-color">Color <input type="color" value={color} onChange={event => update('strokeColor' in selectedElement! ? { strokeColor: event.target.value } : { color: event.target.value })} /></label>}
-        {selectedElement && 'strokeWidth' in selectedElement && <label className="pdf-toolbar-color">Stroke <input className="w-14" type="number" min="0" max="100" value={selectedElement.strokeWidth} onChange={event => update({ strokeWidth: Number(event.target.value) })} /></label>}
+        {selectedElement && 'strokeWidth' in selectedElement && <label className="pdf-toolbar-color">Stroke <input aria-label="Stroke width" className="pdf-toolbar-number" type="number" min="0" max="100" step="0.5" value={selectedElement.strokeWidth} onChange={event => update({ strokeWidth: Number(event.target.value) })} /></label>}
         {selectedElement && 'fillColor' in selectedElement && <label className="pdf-toolbar-color">Fill <input type="color" value={selectedElement.fillColor || '#ffffff'} onChange={event => update({ fillColor: event.target.value })} /></label>}
         {selectedElement?.type === 'image' && <button className="pdf-style-toggle" onClick={onReplaceImage}>Replace image</button>}
         {selectedElement && <>
