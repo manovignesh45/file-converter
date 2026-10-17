@@ -31,6 +31,10 @@ Dragging a Quick Fill card over a page now previews its field outline and corner
 
 Quick Fill card dragging now uses pointer movement instead of native HTML drag events. One preview follows the pointer and changes into the placement outline over a page; releasing places the selected field at that preview position. This removes the native drag image handoff and gives the preview pointer-rate updates. Tests, TypeScript, and lint pass; browser confirmation of the motion remains pending.
 
+Quick Fill now opens as an empty, session-only collection. Users can add and label as many text and image items as needed, create signatures and marks, reorder or remove items, and search the collection. Dates are entered as ordinary text values, with no separate date helper. “Add common labels” is an optional shortcut. Linked text and image placements follow changes to their source; editing an individual text value or replacing an individual image detaches that placement. Removing a source leaves its existing placements on the PDF. Signatures retain their existing optional browser persistence. The full test suite, TypeScript, lint, and production build passed for the initial collection revision; lint reports two existing image warnings outside the editor. Browser verification and the Phase 1/2 exit gates remain open.
+
+Image and Sign creation tiles accept a dropped PNG or JPEG as well as a click. Dropping onto Sign opens the signature upload dialog with the file previewed so the user can name it and choose browser storage. The dialog's upload area also accepts a dropped image. TypeScript, lint, and all 38 tests passed; live drag/drop verification remains pending.
+
 ## 1. Findings and recommended direction
 
 The repository already has a usable overlay PDF editor. Preserve PDF.js for loading/rendering, Fabric for object interactions, and pdf-lib for export. The redesign should extend these modules incrementally.

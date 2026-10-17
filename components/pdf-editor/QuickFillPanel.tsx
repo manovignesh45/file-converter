@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import type { PdfFieldDefinition } from '../../types/pdfFields'
-import type { PdfDateFormat } from '../../lib/pdf/dateFormatting'
 import { fieldDisplayValue, isTextualField } from '../../lib/pdf/fields'
 import type { PdfPoint } from '../../types/pdfEditor'
 
@@ -11,26 +10,37 @@ interface DragLocation { pageIndex: number; point: PdfPoint; left: number; top: 
 interface Props {
   fields: PdfFieldDefinition[]
   activeFieldId: string | null
+  focusFieldId: string | null
   onSelectField: (id: string) => void
   onDragFieldStart: () => void
   onLocateField: (id: string, clientX: number, clientY: number) => DragLocation | null
   onDropField: (id: string, pageIndex: number, point: PdfPoint) => void
   onChangeField: (field: PdfFieldDefinition) => void
-  onToday: (id: string) => void
+  onCreateText: () => string
+  onCreateCommon: () => void
+  onCreateMark: (kind: 'checkmark' | 'crossmark') => void
+  onAddImage: (file: File, replaceFieldId?: string) => Promise<void>
+  onRemoveField: (id: string) => Promise<void>
+  onRenameField: (id: string, name: string) => Promise<void>
+  onMoveField: (id: string, direction: -1 | 1) => void
   scope: 'current' | 'selected' | 'all'
   onScopeChange: (scope: 'current' | 'selected' | 'all') => void
   selectedPages: number[]
   onTogglePage: (index: number) => void
   pageCount: number
-  onCreateSignature: () => void
-  onDeleteSignature: (id: string) => void
-  onRenameSignature: (id: string, name: string) => void
+  onCreateSignature: (file?: File) => void
   signatureUrls: Record<string, string>
   savedSignatureIds: string[]
 }
 
-export default function QuickFillPanel({ fields, activeFieldId, onSelectField, onDragFieldStart, onLocateField, onDropField, onChangeField, onToday, scope, onScopeChange, selectedPages, onTogglePage, pageCount, onCreateSignature, onDeleteSignature, onRenameSignature, signatureUrls, savedSignatureIds }: Props) {
+export default function QuickFillPanel({ fields, activeFieldId, focusFieldId, onSelectField, onDragFieldStart, onLocateField, onDropField, onChangeField, onCreateText, onCreateCommon, onCreateMark, onAddImage, onRemoveField, onRenameField, onMoveField, scope, onScopeChange, selectedPages, onTogglePage, pageCount, onCreateSignature, signatureUrls, savedSignatureIds }: Props) {
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const labelInputRef = useRef<HTMLInputElement>(null)
+  const replaceImageFieldRef = useRef<string | undefined>(undefined)
+  const [search, setSearch] = useState('')
+  const [editingLabelId, setEditingLabelId] = useState<string | null>(null)
+  const [fileDropTarget, setFileDropTarget] = useState<'image' | 'signature' | null>(null)
   const dragGestureRef = useRef<{ field: PdfFieldDefinition; pointerId: number; startX: number; startY: number; started: boolean } | null>(null)
   const suppressClickRef = useRef(false)
   const clearDragPreview = () => {
@@ -41,6 +51,17 @@ export default function QuickFillPanel({ fields, activeFieldId, onSelectField, o
   useEffect(() => () => {
     dragPreviewRef.current?.remove()
   }, [])
+  useEffect(() => {
+    if (!focusFieldId) return
+    setSearch('')
+    setEditingLabelId(focusFieldId)
+  }, [focusFieldId])
+  useEffect(() => {
+    if (!editingLabelId || !labelInputRef.current) return
+    labelInputRef.current.focus()
+    labelInputRef.current.select()
+    labelInputRef.current.scrollIntoView({ block: 'nearest' })
+  }, [editingLabelId])
 
   const startPointer = (event: ReactPointerEvent<HTMLDivElement>, field: PdfFieldDefinition) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest('input, textarea, select, button')) return
@@ -57,7 +78,7 @@ export default function QuickFillPanel({ fields, activeFieldId, onSelectField, o
       onDragFieldStart()
       const preview = document.createElement('div')
       preview.className = 'pdf-field-drag-preview'
-      if (gesture.field.kind === 'signature' && signatureUrls[gesture.field.assetId]) {
+      if ((gesture.field.kind === 'signature' || gesture.field.kind === 'image') && signatureUrls[gesture.field.assetId]) {
         const image = document.createElement('img')
         image.src = signatureUrls[gesture.field.assetId]
         image.alt = gesture.field.label
@@ -99,25 +120,64 @@ export default function QuickFillPanel({ fields, activeFieldId, onSelectField, o
     clearDragPreview()
   }
 
+  const filteredFields = fields.filter(field => `${field.label} ${isTextualField(field) ? fieldDisplayValue(field) : ''}`.toLowerCase().includes(search.toLowerCase()))
+  const chooseImage = (replaceFieldId?: string) => {
+    replaceImageFieldRef.current = replaceFieldId
+    imageInputRef.current?.click()
+  }
+  const enterFileTarget = (event: ReactDragEvent<HTMLButtonElement>, target: 'image' | 'signature') => {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setFileDropTarget(target)
+  }
+  const dropFile = (event: ReactDragEvent<HTMLButtonElement>, target: 'image' | 'signature') => {
+    event.preventDefault()
+    setFileDropTarget(null)
+    const file = event.dataTransfer.files[0]
+    if (!file) return
+    if (target === 'image') void onAddImage(file)
+    else onCreateSignature(file)
+  }
+  const leaveFileTarget = (event: ReactDragEvent<HTMLButtonElement>) => {
+    if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setFileDropTarget(null)
+  }
+
   return <aside id="pdf-quick-fill" className="pdf-fill-panel" aria-label="Quick Fill">
     <h2>Quick Fill</h2>
     {activeFieldId && <p className="mb-3 rounded-lg bg-primary-50 px-3 py-2 text-xs text-primary-800" role="status">Click a page to place {fields.find(field => field.id === activeFieldId)?.label || 'this item'}. Press Escape to cancel.</p>}
-    <p className="mb-4">Click a card, then click a page, or drag it onto a page. The placed item stays selected for resizing and moving. Use the controls above selected text to change its size.</p>
+    <p className="mb-3">Keep values here while editing this PDF. Click a card and then a page, or drag a card onto a page. Adjust the placed item there.</p>
+    <div className="mb-3 space-y-2">
+      <button type="button" className="btn-secondary w-full text-xs" onClick={onCreateText}>+ Text</button>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className={`btn-secondary min-h-20 flex-col border-dashed text-xs ${fileDropTarget === 'image' ? 'border-primary-500 bg-primary-50' : ''}`} onClick={() => chooseImage()} onDragOver={event => enterFileTarget(event, 'image')} onDragLeave={leaveFileTarget} onDrop={event => dropFile(event, 'image')}><span>+ Image</span><span className="mt-1 font-normal text-gray-500">Click or drop PNG/JPG</span></button>
+        <button type="button" className={`btn-secondary min-h-20 flex-col border-dashed text-xs ${fileDropTarget === 'signature' ? 'border-primary-500 bg-primary-50' : ''}`} onClick={() => onCreateSignature()} onDragOver={event => enterFileTarget(event, 'signature')} onDragLeave={leaveFileTarget} onDrop={event => dropFile(event, 'signature')}><span>+ Sign</span><span className="mt-1 font-normal text-gray-500">Click or drop PNG/JPG</span></button>
+      </div>
+    </div>
+    <div className="mb-4 flex flex-wrap gap-2">
+      <button type="button" className="text-xs font-semibold text-primary-700" onClick={onCreateCommon}>Add common labels</button>
+      <button type="button" className="text-xs font-semibold text-primary-700" onClick={() => onCreateMark('checkmark')}>+ Checkmark</button>
+      <button type="button" className="text-xs font-semibold text-primary-700" onClick={() => onCreateMark('crossmark')}>+ Cross</button>
+    </div>
+    <input ref={imageInputRef} type="file" accept="image/png,image/jpeg" className="hidden" aria-label="Choose Quick Fill image" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void onAddImage(file, replaceImageFieldRef.current); event.currentTarget.value = '' }} />
+    {fields.length > 4 && <input className="mb-3" type="search" aria-label="Search Quick Fill items" placeholder="Search items" value={search} onChange={event => setSearch(event.target.value)} />}
+    {!fields.length && <p className="rounded-lg border border-dashed border-gray-300 p-3 text-sm">Add a text value, image, or signature to get started.</p>}
+    {fields.length > 0 && filteredFields.length === 0 && <p className="text-sm">No matching items.</p>}
     <div className="space-y-3">
-      {fields.map(field => <div key={field.id} className={`pdf-field-card ${activeFieldId === field.id ? 'active' : ''}`} role="button" tabIndex={0} aria-label={`Place ${field.label}`} aria-pressed={activeFieldId === field.id}
+      {filteredFields.map(field => <div key={field.id} className={`pdf-field-card ${activeFieldId === field.id ? 'active' : ''}`} role="button" tabIndex={0} aria-label={`Place ${field.label}`} aria-pressed={activeFieldId === field.id}
         onClick={event => { if (suppressClickRef.current) { event.preventDefault(); return }; if (!(event.target as HTMLElement).closest('input, textarea, select, button')) onSelectField(field.id) }}
         onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onSelectField(field.id) } }}
         onPointerDown={event => startPointer(event, field)} onPointerMove={movePointer} onPointerUp={endPointer} onPointerCancel={clearDragPreview}>
-        <div className="flex items-center justify-between gap-2">{field.kind === 'signature' ? <input className="min-w-0 flex-1 text-sm font-semibold" aria-label="Signature name" defaultValue={field.label} onBlur={event => { if (event.target.value.trim() && event.target.value.trim() !== field.label) onRenameSignature(field.id, event.target.value.trim()) }} /> : <strong className="text-sm text-gray-800">{field.label}</strong>}</div>
-        {field.kind === 'date' ? <div className="mt-2 space-y-2">
-          <input aria-label="Date" type="date" value={field.date} onChange={event => onChangeField({ ...field, date: event.target.value })} />
-          <select aria-label="Date format" value={field.format} onChange={event => onChangeField({ ...field, format: event.target.value as PdfDateFormat })}><option>DD/MM/YYYY</option><option>DD-MM-YYYY</option><option>YYYY-MM-DD</option><option>DD MMM YYYY</option></select>
-          <input aria-label="Manual date text" placeholder="Manual display text (optional)" value={field.manualText ?? ''} onChange={event => onChangeField({ ...field, manualText: event.target.value || undefined })} />
-          <button className="text-xs font-semibold text-primary-700" onClick={() => onToday(field.id)}>Use today</button>
-        </div> : 'value' in field ? <textarea className="mt-2" aria-label={field.label} rows={field.kind === 'address' ? 2 : 1} value={field.value} onChange={event => onChangeField({ ...field, value: event.target.value })} /> : field.kind === 'signature' ? <div className="mt-2"><div role="img" aria-label={`${field.label} preview`} className="h-14 w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: signatureUrls[field.assetId] ? `url(${signatureUrls[field.assetId]})` : undefined }} /><div className="mt-1 flex justify-between gap-2"><span className="text-xs">{savedSignatureIds.includes(field.id) ? 'Saved in this browser' : 'This session only'}</span><button className="text-xs text-red-700" onClick={() => onDeleteSignature(field.id)}>Remove</button></div></div> : <p className="mt-2 text-xs">Vector mark</p>}
+        <div className="flex items-center gap-1">
+          {editingLabelId === field.id ? <input ref={labelInputRef} key={`${field.id}:${field.label}`} className="min-w-0 flex-1 text-sm font-semibold" aria-label={`${field.label} label`} defaultValue={field.label} maxLength={100} onBlur={event => { if (event.target.value.trim() && event.target.value.trim() !== field.label) void onRenameField(field.id, event.target.value); setEditingLabelId(null) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') { event.currentTarget.value = field.label; event.currentTarget.blur() } }} /> : <strong className="min-w-0 flex-1 truncate text-sm text-gray-800" title={field.label}>{field.label}</strong>}
+          <button type="button" className="px-1 text-xs" aria-label={`Rename ${field.label}`} title="Rename item" onClick={() => setEditingLabelId(field.id)}>✎</button>
+          <button type="button" className="px-1 text-xs" aria-label={`Move ${field.label} up`} title="Move up" disabled={fields[0]?.id === field.id} onClick={() => onMoveField(field.id, -1)}>↑</button>
+          <button type="button" className="px-1 text-xs" aria-label={`Move ${field.label} down`} title="Move down" disabled={fields[fields.length - 1]?.id === field.id} onClick={() => onMoveField(field.id, 1)}>↓</button>
+          <button type="button" className="px-1 text-xs text-red-700" aria-label={`Remove ${field.label}`} title="Remove item" onClick={() => { void onRemoveField(field.id) }}>×</button>
+        </div>
+        {isTextualField(field) ? <div className="mt-2"><textarea aria-label={`${field.label} value`} rows={fieldDisplayValue(field).length > 80 ? 3 : 1} value={fieldDisplayValue(field)} onChange={event => onChangeField(field.kind === 'date' ? { ...field, manualText: event.target.value } : { ...field, value: event.target.value })} /></div> : field.kind === 'signature' || field.kind === 'image' ? <div className="mt-2"><div role="img" aria-label={`${field.label} preview`} className="h-20 w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: signatureUrls[field.assetId] ? `url(${signatureUrls[field.assetId]})` : undefined }} /><div className="mt-1 flex justify-between gap-2"><span className="text-xs">{field.kind === 'signature' && savedSignatureIds.includes(field.id) ? 'Saved in this browser' : 'This session only'}</span>{field.kind === 'image' && <button type="button" className="text-xs font-semibold text-primary-700" onClick={() => chooseImage(field.id)}>Replace image</button>}</div></div> : <p className="mt-2 text-xs">{field.kind === 'checkmark' ? '✓ Checkmark' : '✕ Cross mark'}</p>}
       </div>)}
     </div>
-    <button className="btn-secondary mt-4 w-full" onClick={onCreateSignature}>Create signature</button>
     <div className="mt-5 border-t border-gray-200 pt-4">
       <label className="pdf-property-field">Place on
         <select value={scope} onChange={event => onScopeChange(event.target.value as Props['scope'])}><option value="current">Clicked page</option><option value="selected">Selected pages</option><option value="all">All pages</option></select>

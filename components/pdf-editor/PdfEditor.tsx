@@ -12,8 +12,7 @@ import SignatureDialog from './SignatureDialog'
 import { commitHistory, createHistory, redoHistory, undoHistory } from '../../lib/pdf/history'
 import { cloneElementToPage, createDocumentPage, createEditorDocument, moveElementBy, sourcePageId, toLegacyExportPayload } from '../../lib/pdf/document'
 import { hasSupportedImageSignature, MAX_IMAGE_BYTES } from '../../lib/pdf/validation'
-import { applyPlacedElementEdit, createDefaultFields, fieldDisplayValue, isTextualField, updateLinkedFieldText } from '../../lib/pdf/fields'
-import { localTodayDateOnly } from '../../lib/pdf/dateFormatting'
+import { applyPlacedElementEdit, createCommonFields, fieldDisplayValue, isTextualField, unlinkRemovedField, updateLinkedFieldImage, updateLinkedFieldText } from '../../lib/pdf/fields'
 import { createFieldPlacements, fitFieldPlacementPoint } from '../../lib/pdf/placement'
 import { clientToPdfPoint, fieldPlacementSize } from '../../lib/pdf/placement'
 import { pdfToViewport } from '../../lib/pdf/coordinates'
@@ -61,9 +60,11 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
   const [showQuickFill, setShowQuickFill] = useState(true)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [placementFieldId, setPlacementFieldId] = useState<string | null>(null)
+  const [focusFieldId, setFocusFieldId] = useState<string | null>(null)
   const [placementScope, setPlacementScope] = useState<'current' | 'selected' | 'all'>('current')
   const [selectedPages, setSelectedPages] = useState<number[]>([])
   const [signatureDialogOpen, setSignatureDialogOpen] = useState(false)
+  const [signatureInitialUpload, setSignatureInitialUpload] = useState<File | null>(null)
   const [signatureRecords, setSignatureRecords] = useState<Record<string, SignatureRecord>>({})
   const [savedSignatureIds, setSavedSignatureIds] = useState<string[]>([])
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -115,7 +116,7 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
         }
         if (!cancelled) {
           setPages(loadedPages)
-          setHistory(current => ({ ...current, present: { ...current.present, pages: info, fields: current.present.fields.some(field => field.kind !== 'signature') ? current.present.fields : [...createDefaultFields(() => crypto.randomUUID()), ...current.present.fields] } }))
+          setHistory(current => ({ ...current, present: { ...current.present, pages: info } }))
           setNeedsPassword(false)
           setLoading(false)
         }
@@ -221,7 +222,7 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     const sourcePage = pageInfo[pageIndex]
     if (!field || !sourcePage) return
     if (isTextualField(field) && !fieldDisplayValue(field).trim()) { setError(`Enter ${field.label.toLowerCase()} before placing it.`); return }
-    if (field.kind === 'signature' && !assets[field.assetId]) { setError('This signature image is unavailable. Recreate it before placing.'); return }
+    if ((field.kind === 'signature' || field.kind === 'image') && !assets[field.assetId]) { setError('This image is unavailable. Add it again before placing.'); return }
     const targets = fieldTargets(sourcePage)
     if (!targets.length) { setError('Select at least one target page.'); return }
     const fittedPoint = fitFieldPlacementPoint(field, sourcePage, targets, point)
@@ -240,9 +241,92 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     setHistory(current => commitHistory(current, {
       ...current.present,
       fields: current.present.fields.map(field => field.id === updated.id ? updated : field),
-      elements: isTextualField(updated) ? updateLinkedFieldText(current.present.elements, updated) : current.present.elements,
+      elements: isTextualField(updated) ? updateLinkedFieldText(current.present.elements, updated) : updated.kind === 'image' ? updateLinkedFieldImage(current.present.elements, updated) : current.present.elements,
     }))
   }, [])
+
+  const addTextField = () => {
+    const id = crypto.randomUUID()
+    setHistory(current => {
+      const labels = new Set(current.present.fields.map(field => field.label.toLowerCase()))
+      let count = 1
+      while (labels.has(`text ${count}`)) count += 1
+      return commitHistory(current, { ...current.present, fields: [...current.present.fields, { id, kind: 'custom', label: `Text ${count}`, value: '' }] })
+    })
+    setFocusFieldId(id)
+    return id
+  }
+
+  const addCommonFields = () => {
+    const existing = new Set(document.fields.map(field => field.label.toLowerCase()))
+    const additions = createCommonFields(() => crypto.randomUUID()).filter(field => !existing.has(field.label.toLowerCase()))
+    if (!additions.length) return
+    setHistory(current => {
+      return commitHistory(current, { ...current.present, fields: [...current.present.fields, ...additions] })
+    })
+    setFocusFieldId(additions[0].id)
+  }
+
+  const addMarkField = (kind: 'checkmark' | 'crossmark') => {
+    const id = crypto.randomUUID()
+    setHistory(current => commitHistory(current, { ...current.present, fields: [...current.present.fields, { id, kind, label: kind === 'checkmark' ? 'Checkmark' : 'Cross mark' }] }))
+    setFocusFieldId(id)
+  }
+
+  const moveField = (id: string, direction: -1 | 1) => {
+    setHistory(current => {
+      const fields = [...current.present.fields]
+      const index = fields.findIndex(field => field.id === id)
+      const target = index + direction
+      if (index < 0 || target < 0 || target >= fields.length) return current
+      const moved = fields[index]
+      fields[index] = fields[target]
+      fields[target] = moved
+      return commitHistory(current, { ...current.present, fields })
+    })
+  }
+
+  const removeField = async (id: string) => {
+    const field = document.fields.find(item => item.id === id)
+    if (!field) return
+    if (field.kind === 'signature' && savedSignatureIds.includes(id)) {
+      if (!window.confirm('Remove this saved signature from this browser? Existing placements will stay on the PDF.')) return
+      try {
+        await deleteLocalSignature(id)
+        setSavedSignatureIds(current => current.filter(item => item !== id))
+      } catch { setError('The signature could not be removed from local storage.'); return }
+    }
+    setHistory(current => commitHistory(current, { ...current.present, fields: current.present.fields.filter(item => item.id !== id), elements: unlinkRemovedField(current.present.elements, id) }))
+    if (placementFieldId === id) setPlacementFieldId(null)
+  }
+
+  const addOrReplaceFieldImage = async (chosen: File, fieldId?: string) => {
+    const replacingField = fieldId ? document.fields.find(item => item.id === fieldId) : undefined
+    if (fieldId && replacingField?.kind !== 'image') { setError('This image item is no longer available.'); return }
+    if (chosen.size === 0 || chosen.size > MAX_IMAGE_BYTES) { setError('Images must be non-empty and no larger than 50 MB.'); return }
+    const mimeType = hasSupportedImageSignature(new Uint8Array(await chosen.slice(0, 12).arrayBuffer()))
+    if (!mimeType) { setError('Choose a valid PNG or JPEG image.'); return }
+    let bitmap: ImageBitmap
+    try { bitmap = await createImageBitmap(chosen) } catch { setError('The image could not be opened.'); return }
+    if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 40_000_000) { bitmap.close(); setError('The image dimensions are unsupported.'); return }
+    const scale = Math.min(180 / bitmap.width, 120 / bitmap.height)
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+    bitmap.close()
+    const assetId = crypto.randomUUID()
+    const url = URL.createObjectURL(chosen)
+    setAssets(current => ({ ...current, [assetId]: chosen }))
+    setAssetUrls(current => ({ ...current, [assetId]: url }))
+    if (replacingField?.kind === 'image') {
+      changeField({ ...replacingField, assetId, mimeType, width, height })
+    } else {
+      const id = crypto.randomUUID()
+      const label = chosen.name.replace(/\.[^.]+$/, '').trim().slice(0, 100) || 'Image'
+      setHistory(current => commitHistory(current, { ...current.present, fields: [...current.present.fields, { id, kind: 'image', label, assetId, mimeType, width, height }] }))
+      setFocusFieldId(id)
+    }
+    setError(null)
+  }
 
   const addSignature = async (record: SignatureRecord, saveLocally: boolean) => {
     if (saveLocally) await saveLocalSignature(record)
@@ -256,16 +340,7 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     setTool('select')
     setShowQuickFill(true)
     setPlacementFieldId(record.id)
-  }
-
-  const removeSignature = async (id: string) => {
-    if (!window.confirm('Remove this signature from the library? Existing placements will stay on the document.')) return
-    try {
-      if (savedSignatureIds.includes(id)) await deleteLocalSignature(id)
-      setSavedSignatureIds(current => current.filter(item => item !== id))
-      setHistory(current => commitHistory(current, { ...current.present, fields: current.present.fields.filter(field => field.id !== id) }))
-      if (placementFieldId === id) setPlacementFieldId(null)
-    } catch { setError('The signature could not be removed from local storage.') }
+    setFocusFieldId(record.id)
   }
 
   const renameSignature = async (id: string, name: string) => {
@@ -276,6 +351,15 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
       setSignatureRecords(current => ({ ...current, [id]: { ...record, name } }))
       setHistory(current => commitHistory(current, { ...current.present, fields: current.present.fields.map(field => field.id === id ? { ...field, label: name } : field) }))
     } catch { setError('The signature name could not be saved locally.') }
+  }
+
+  const renameField = async (id: string, name: string) => {
+    const label = name.trim().slice(0, 100)
+    const field = document.fields.find(item => item.id === id)
+    if (!field || !label || label === field.label) return
+    if (document.fields.some(item => item.id !== id && item.label.toLowerCase() === label.toLowerCase())) { setError('Use a different label so Quick Fill items are easy to identify.'); return }
+    if (field.kind === 'signature') await renameSignature(id, label)
+    else { changeField({ ...field, label }); setError(null) }
   }
 
   const addAt = useCallback((pageIndex: number, point: PdfPoint) => {
@@ -504,10 +588,21 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
             />
           ))}
         </div>
-        {showQuickFill && <QuickFillPanel fields={document.fields} activeFieldId={placementFieldId} onSelectField={id => { setTool('select'); setPlacementFieldId(current => current === id ? null : id) }} onDragFieldStart={() => { setTool('select'); setPlacementFieldId(null) }} onLocateField={locateDraggedField} onDropField={placeField} onChangeField={changeField} onToday={id => { const field = document.fields.find(item => item.id === id); if (field?.kind === 'date') changeField({ ...field, date: localTodayDateOnly(), manualText: undefined }) }} scope={placementScope} onScopeChange={setPlacementScope} selectedPages={selectedPages} onTogglePage={index => setSelectedPages(current => current.includes(index) ? current.filter(item => item !== index) : [...current, index])} pageCount={pages.length} onCreateSignature={() => setSignatureDialogOpen(true)} onDeleteSignature={id => { void removeSignature(id) }} onRenameSignature={(id, name) => { void renameSignature(id, name) }} signatureUrls={assetUrls} savedSignatureIds={savedSignatureIds} />}
+        {showQuickFill && <QuickFillPanel
+          fields={document.fields} activeFieldId={placementFieldId} focusFieldId={focusFieldId}
+          onSelectField={id => { setTool('select'); setPlacementFieldId(current => current === id ? null : id) }}
+          onDragFieldStart={() => { setTool('select'); setPlacementFieldId(null) }}
+          onLocateField={locateDraggedField} onDropField={placeField} onChangeField={changeField}
+          onCreateText={addTextField} onCreateCommon={addCommonFields} onCreateMark={addMarkField}
+          onAddImage={addOrReplaceFieldImage} onRemoveField={removeField} onRenameField={renameField} onMoveField={moveField}
+          scope={placementScope} onScopeChange={setPlacementScope} selectedPages={selectedPages}
+          onTogglePage={index => setSelectedPages(current => current.includes(index) ? current.filter(item => item !== index) : [...current, index])}
+          pageCount={pages.length} onCreateSignature={file => { setSignatureInitialUpload(file ?? null); setSignatureDialogOpen(true) }}
+          signatureUrls={assetUrls} savedSignatureIds={savedSignatureIds}
+        />}
       </div>
       <footer className="pdf-editor-status"><span>Page {activePage + 1} of {pages.length}</span><span>Zoom {Math.round(zoom * 100)}%</span><span>{selectedTextOverflow ? 'Selected text exceeds its box' : 'Unsaved session'}</span></footer>
-      {signatureDialogOpen && <SignatureDialog onClose={() => setSignatureDialogOpen(false)} onSave={addSignature} />}
+      {signatureDialogOpen && <SignatureDialog initialUpload={signatureInitialUpload} onClose={() => { setSignatureDialogOpen(false); setSignatureInitialUpload(null) }} onSave={addSignature} />}
     </div>
   )
 }

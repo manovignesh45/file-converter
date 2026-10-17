@@ -1,6 +1,6 @@
 import type { PdfDateFormat } from '../lib/pdf/dateFormatting'
 
-export type PdfFieldKind = 'name' | 'address' | 'place' | 'date' | 'custom' | 'initials' | 'signature' | 'checkmark' | 'crossmark'
+export type PdfFieldKind = 'name' | 'address' | 'place' | 'date' | 'custom' | 'initials' | 'image' | 'signature' | 'checkmark' | 'crossmark'
 
 interface FieldBase { id: string; kind: PdfFieldKind; label: string }
 export interface TextFieldDefinition extends FieldBase {
@@ -18,7 +18,14 @@ export interface SignatureFieldDefinition extends FieldBase {
   assetId: string
   mimeType: 'image/png' | 'image/jpeg'
 }
+export interface ImageFieldDefinition extends FieldBase {
+  kind: 'image'
+  assetId: string
+  mimeType: 'image/png' | 'image/jpeg'
+  width: number
+  height: number
+}
 export interface MarkFieldDefinition extends FieldBase {
   kind: 'checkmark' | 'crossmark'
 }
-export type PdfFieldDefinition = TextFieldDefinition | DateFieldDefinition | SignatureFieldDefinition | MarkFieldDefinition
+export type PdfFieldDefinition = TextFieldDefinition | DateFieldDefinition | ImageFieldDefinition | SignatureFieldDefinition | MarkFieldDefinition

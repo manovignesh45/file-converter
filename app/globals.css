@@ -133,7 +133,9 @@
 .pdf-field-card { @apply cursor-grab select-none rounded-xl border border-gray-200 bg-gray-50 p-3; touch-action: none; }
 .pdf-field-card:active { cursor: grabbing; }
 .pdf-field-card:focus-visible { @apply outline outline-2 outline-offset-2 outline-primary-500; }
-.pdf-field-card input, .pdf-field-card textarea, .pdf-field-card select, .pdf-field-card button { cursor: auto; user-select: text; touch-action: auto; }
+.pdf-field-card input, .pdf-field-card textarea { cursor: text; user-select: text; touch-action: auto; }
+.pdf-field-card select, .pdf-field-card button { cursor: pointer; user-select: none; touch-action: auto; }
+.pdf-field-card button:disabled { cursor: not-allowed; }
 .pdf-field-drag-preview { position: fixed; top: 0; left: 0; z-index: 9999; max-width: 240px; border: 1px solid #a5b4fc; border-radius: 8px; background: white; padding: 6px 10px; color: #0f172a; font: 16px sans-serif; white-space: pre-wrap; box-shadow: 0 4px 12px #0f172a33; pointer-events: none; display: flex; align-items: center; will-change: transform; }
 .pdf-field-drag-preview img { display: block; max-width: 200px; max-height: 72px; }
 .pdf-field-drag-preview.is-on-page { max-width: none; overflow: visible; border: 2px solid #4f46e5; border-radius: 0; background: rgb(255 255 255 / 70%); padding: 0; box-shadow: none; line-height: 1.2; }

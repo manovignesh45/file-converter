@@ -1,20 +1,21 @@
 'use client'
 
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type PointerEvent } from 'react'
 import { hasVisiblePixels, validateSignatureBlob, type SignatureRecord } from '../../lib/pdf/signatures'
 
-interface Props { onClose: () => void; onSave: (record: SignatureRecord, saveLocally: boolean) => Promise<void> }
+interface Props { initialUpload?: File | null; onClose: () => void; onSave: (record: SignatureRecord, saveLocally: boolean) => Promise<void> }
 
 function pngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not create the signature image.')), 'image/png'))
 }
 
-export default function SignatureDialog({ onClose, onSave }: Props) {
-  const [method, setMethod] = useState<'draw' | 'type' | 'upload'>('draw')
+export default function SignatureDialog({ initialUpload, onClose, onSave }: Props) {
+  const [method, setMethod] = useState<'draw' | 'type' | 'upload'>(initialUpload ? 'upload' : 'draw')
   const [name, setName] = useState('My signature')
   const [text, setText] = useState('')
   const [font, setFont] = useState<'serif' | 'script'>('script')
-  const [upload, setUpload] = useState<File | null>(null)
+  const [upload, setUpload] = useState<File | null>(initialUpload ?? null)
+  const [fileDragOver, setFileDragOver] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [saveLocally, setSaveLocally] = useState(false)
   const [hasStroke, setHasStroke] = useState(false)
@@ -65,6 +66,12 @@ export default function SignatureDialog({ onClose, onSave }: Props) {
     stroke?.push(pos)
     context.lineTo(pos.x, pos.y)
     context.stroke()
+  }
+  const handleUploadDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setFileDragOver(false)
+    const file = event.dataTransfer.files[0]
+    if (file) { setUpload(file); setError(null) }
   }
   const save = async () => {
     if (!name.trim()) { setError('Give the signature a name.'); return }
@@ -125,7 +132,12 @@ export default function SignatureDialog({ onClose, onSave }: Props) {
     <div className="mt-4 flex gap-2">{(['draw', 'type', 'upload'] as const).map(value => <button key={value} className={`pdf-style-toggle capitalize ${method === value ? 'active' : ''}`} onClick={() => setMethod(value)}>{value}</button>)}</div>
     {method === 'draw' && <div className="mt-3"><canvas ref={canvasRef} width={700} height={180} className="w-full rounded-lg border border-gray-300 bg-white" style={{ touchAction: 'none' }} onPointerDown={start} onPointerMove={move} onPointerUp={() => { drawingRef.current = false }} onPointerCancel={() => { drawingRef.current = false }} aria-label="Draw signature" /><button className="mt-2 text-sm text-primary-700" onClick={() => { canvasRef.current?.getContext('2d')?.clearRect(0, 0, 700, 180); strokesRef.current = []; strokeLengthRef.current = 0; setHasStroke(false) }}>Clear drawing</button></div>}
     {method === 'type' && <div className="mt-3 space-y-2"><input className="input-field" aria-label="Signature text" value={text} onChange={event => setText(event.target.value)} placeholder="Type your name" /><select className="input-field" aria-label="Signature style" value={font} onChange={event => setFont(event.target.value as 'serif' | 'script')}><option value="script">Display italic</option><option value="serif">Serif italic</option></select><div className="min-h-20 rounded-lg border border-gray-200 p-3 text-3xl italic" style={{ fontFamily: font === 'script' ? 'ConvertPro Signature Display' : 'ConvertPro Signature Serif' }}>{text || 'Preview'}</div></div>}
-    {method === 'upload' && <div className="mt-3"><input type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" aria-label="Upload signature image" onChange={event => setUpload(event.target.files?.[0] || null)} />{previewUrl && <div role="img" aria-label="Signature preview" className="mt-3 h-32 w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${previewUrl})` }} />}</div>}
+    {method === 'upload' && <div className={`mt-3 rounded-lg border-2 border-dashed p-4 ${fileDragOver ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`} onDragOver={event => { if (!event.dataTransfer.types.includes('Files')) return; event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setFileDragOver(true) }} onDragLeave={() => setFileDragOver(false)} onDrop={handleUploadDrop}>
+      <p className="mb-2 text-sm">Drop a PNG or JPG signature here, or choose a file.</p>
+      <input type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" aria-label="Upload signature image" onChange={event => { setUpload(event.target.files?.[0] || null); setError(null) }} />
+      {upload && <p className="mt-2 text-xs text-gray-600">{upload.name}</p>}
+      {previewUrl && <div role="img" aria-label="Signature preview" className="mt-3 h-32 w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${previewUrl})` }} />}
+    </div>}
     <label className="pdf-property-field mt-4">Signature name<input value={name} onChange={event => setName(event.target.value)} maxLength={100} /></label>
     <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={saveLocally} onChange={event => setSaveLocally(event.target.checked)} />Save to this browser for reuse</label>
     {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}

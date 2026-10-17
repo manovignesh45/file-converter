@@ -73,7 +73,9 @@ function validElement(element: any): element is PdfEditorElement {
     case 'image':
       return typeof element.assetId === 'string' && element.assetId.length <= 100 &&
         ['image/png', 'image/jpeg'].includes(element.mimeType) &&
-        (element.signatureId === undefined || (typeof element.signatureId === 'string' && element.signatureId.length <= 100))
+        (element.signatureId === undefined || (typeof element.signatureId === 'string' && element.signatureId.length <= 100)) &&
+        (element.fieldId === undefined || (typeof element.fieldId === 'string' && element.fieldId.length <= 100)) &&
+        (element.fieldLink === undefined || ['linked', 'independent'].includes(element.fieldLink))
     case 'rectangle':
     case 'ellipse':
       return validColor(element.strokeColor) &&

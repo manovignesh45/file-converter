@@ -7,6 +7,7 @@ export interface PlacementResult { elements: PdfEditorElement[]; outOfBoundsPage
 
 export function fieldPlacementSize(field: PdfFieldDefinition): { width: number; height: number } {
   if (field.kind === 'signature') return { width: 180, height: 65 }
+  if (field.kind === 'image') return { width: field.width, height: field.height }
   if (field.kind === 'checkmark' || field.kind === 'crossmark') return { width: 22, height: 22 }
   return { width: field.kind === 'initials' ? 80 : 180, height: field.kind === 'address' ? 80 : 35 }
 }
@@ -35,6 +36,7 @@ function placedAt(field: PdfFieldDefinition, page: PdfDocumentPage, point: PdfPo
   const base = { pageId: page.id, pageIndex: page.sourcePageIndex, zIndex: 0, x: point.x, y: point.y, rotation: 0, opacity: 1 }
   const size = fieldPlacementSize(field)
   if (field.kind === 'signature') return [{ ...base, id: id(), type: 'image', ...size, assetId: field.assetId, mimeType: field.mimeType, signatureId: field.id }]
+  if (field.kind === 'image') return [{ ...base, id: id(), type: 'image', ...size, assetId: field.assetId, mimeType: field.mimeType, fieldId: field.id, fieldLink: 'linked' }]
   if (field.kind === 'checkmark' || field.kind === 'crossmark') return [{ ...base, id: id(), type: field.kind, ...size, strokeColor: '#0f172a', strokeWidth: 2.5, fieldId: field.id }]
   if (!isTextualField(field)) return []
   return [{

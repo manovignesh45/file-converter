@@ -13,6 +13,12 @@ describe('field placement', () => {
     expect(result.outOfBoundsPageIds).toEqual([])
   })
 
+  it('places a reusable image with its source dimensions and link', () => {
+    const page = createDocumentPage({ pageIndex: 0, width: 600, height: 800, rotation: 0 }, [0, 0, 600, 800])
+    const result = createFieldPlacements({ id: 'photo', kind: 'image', label: 'Photo', assetId: 'asset', mimeType: 'image/png', width: 90, height: 60 }, page, [page], { x: 25, y: 35 }, () => 'image-1')
+    expect(result.elements).toMatchObject([{ id: 'image-1', type: 'image', width: 90, height: 60, fieldId: 'photo', fieldLink: 'linked' }])
+  })
+
   it('flags fields outside a smaller page', () => {
     const first = createDocumentPage({ pageIndex: 0, width: 600, height: 800, rotation: 0 }, [0, 0, 600, 800])
     const small = createDocumentPage({ pageIndex: 1, width: 100, height: 100, rotation: 0 }, [0, 0, 100, 100])

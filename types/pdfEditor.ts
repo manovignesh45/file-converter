@@ -55,6 +55,8 @@ export interface PdfImageElement extends PdfElementBase {
   assetId: string
   mimeType: 'image/png' | 'image/jpeg'
   signatureId?: string
+  fieldId?: string
+  fieldLink?: 'linked' | 'independent'
 }
 
 export interface PdfShapeElement extends PdfElementBase {

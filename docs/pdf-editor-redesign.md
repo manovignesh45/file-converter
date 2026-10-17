@@ -343,37 +343,9 @@ Typical workflow:
 
 ## 5.2 Right-Side Quick Fill Panel
 
-Provide reusable fields:
+Start with an empty collection. Users can create any number of labeled text values, images, and signatures, then rename, reorder, search, and remove them. Provide check and cross marks as optional items and common labels as an explicit shortcut. Existing PDF placements remain when a source item is removed. Text and image sources belong to the current editing session; signatures retain their optional browser library.
 
-- Full name
-- Address
-- Place
-- Date
-- Custom text
-- Signature
-- Initials
-- Checkmark
-- Cross mark
-
-Users must be able to edit the source value of each reusable text field.
-
-Fields may have default values, but do not silently populate personal details without user input or an existing saved profile.
-
-For dates, provide:
-
-- Date picker
-- Display format selector
-- Custom manual text
-- Option to insert today's date
-
-Suggested formats:
-
-- DD/MM/YYYY
-- DD-MM-YYYY
-- YYYY-MM-DD
-- DD MMM YYYY
-
-Store the underlying date separately from the chosen display format when possible.
+Dates are ordinary text values. Users type the date in the format required by the form; Quick Fill does not show separate date controls.
 
 ## 5.3 Placement Interactions
 
@@ -396,7 +368,7 @@ The sidebar source field must remain available for reuse.
 2. Application enters placement mode.
 3. User clicks the target PDF location.
 4. The field is inserted.
-5. User can continue placing the same field or exit placement mode.
+5. Placement mode ends after that insertion; the source stays available for another explicit placement.
 
 Escape must cancel placement mode.
 
