@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasPdfSignature, hasSupportedImageSignature, parseEditPayload, safeOutputBaseName } from '../../lib/pdf/validation'
+import { hasPdfSignature, hasSupportedImageSignature, parseEditPayload, safeOutputBaseName, validateAssetIds } from '../../lib/pdf/validation'
 
 describe('PDF editor validation', () => {
   it('checks file signatures instead of trusting extensions', () => {
@@ -19,5 +19,12 @@ describe('PDF editor validation', () => {
 
   it('normalizes unsafe output names', () => {
     expect(safeOutputBaseName('../../Quarter 1/report.pdf')).toBe('report')
+  })
+
+  it('requires one uploaded asset per referenced image even when reused', () => {
+    const images = [0, 1].map(index => ({ id: `image-${index}`, pageIndex: 0, zIndex: index, x: 0, y: 0, width: 10, height: 10, rotation: 0, opacity: 1, type: 'image' as const, assetId: 'signature', mimeType: 'image/png' as const }))
+    expect(validateAssetIds(['signature'], images)).toEqual(['signature'])
+    expect(() => validateAssetIds(['signature', 'signature'], images)).toThrow('unique')
+    expect(() => validateAssetIds([], images)).toThrow('do not match')
   })
 })

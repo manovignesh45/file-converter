@@ -1,3 +1,5 @@
+import type { PdfFieldDefinition } from './pdfFields'
+
 export type PdfEditorTool =
   | 'select'
   | 'text'
@@ -9,7 +11,7 @@ export type PdfEditorTool =
   | 'draw'
   | 'highlight'
 
-export type PdfFontFamily = 'Helvetica' | 'TimesRoman' | 'Courier'
+export type PdfFontFamily = 'Helvetica' | 'TimesRoman' | 'Courier' | 'NotoSans'
 
 export interface PdfPoint {
   x: number
@@ -39,12 +41,20 @@ export interface PdfTextElement extends PdfElementBase {
   bold: boolean
   italic: boolean
   underline: boolean
+  fieldId?: string
+  fieldLink?: 'linked' | 'independent'
+  textAlign?: 'left' | 'center' | 'right'
+  singleLine?: boolean
+  autoFit?: boolean
+  minFontSize?: number
+  exportLayout?: { lines: string[]; fontSize: number }
 }
 
 export interface PdfImageElement extends PdfElementBase {
   type: 'image'
   assetId: string
   mimeType: 'image/png' | 'image/jpeg'
+  signatureId?: string
 }
 
 export interface PdfShapeElement extends PdfElementBase {
@@ -72,6 +82,13 @@ export interface PdfHighlightElement extends PdfElementBase {
   color: string
 }
 
+export interface PdfSymbolElement extends PdfElementBase {
+  type: 'checkmark' | 'crossmark'
+  strokeColor: string
+  strokeWidth: number
+  fieldId?: string
+}
+
 export type PdfEditorElement =
   | PdfTextElement
   | PdfImageElement
@@ -79,6 +96,7 @@ export type PdfEditorElement =
   | PdfLineElement
   | PdfDrawingElement
   | PdfHighlightElement
+  | PdfSymbolElement
 
 export interface PdfPageInfo {
   pageIndex: number
@@ -98,6 +116,7 @@ export interface PdfEditorDocument {
   name: string
   pages: PdfDocumentPage[]
   elements: PdfEditorElement[]
+  fields: PdfFieldDefinition[]
 }
 
 export interface PdfEditPayload {

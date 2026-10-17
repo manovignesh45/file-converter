@@ -52,14 +52,28 @@ function validElement(element: any): element is PdfEditorElement {
   switch (element.type) {
     case 'text':
       return typeof element.text === 'string' && element.text.length <= 20_000 &&
-        ['Helvetica', 'TimesRoman', 'Courier'].includes(element.fontFamily) &&
+        ['Helvetica', 'TimesRoman', 'Courier', 'NotoSans'].includes(element.fontFamily) &&
         finiteNumber(element.fontSize) && element.fontSize >= 4 && element.fontSize <= 500 &&
         validColor(element.color) &&
         typeof element.bold === 'boolean' && typeof element.italic === 'boolean' &&
-        typeof element.underline === 'boolean'
+        typeof element.underline === 'boolean' &&
+        (element.fieldId === undefined || (typeof element.fieldId === 'string' && element.fieldId.length <= 100)) &&
+        (element.fieldLink === undefined || ['linked', 'independent'].includes(element.fieldLink)) &&
+        (element.textAlign === undefined || ['left', 'center', 'right'].includes(element.textAlign)) &&
+        (element.singleLine === undefined || typeof element.singleLine === 'boolean') &&
+        (element.autoFit === undefined || typeof element.autoFit === 'boolean') &&
+        (element.minFontSize === undefined || (finiteNumber(element.minFontSize) && element.minFontSize >= 4 && element.minFontSize <= 500)) &&
+        (element.exportLayout === undefined || (element.exportLayout &&
+          Array.isArray(element.exportLayout.lines) && element.exportLayout.lines.length <= 1000 &&
+          element.exportLayout.lines.every((line: unknown) => typeof line === 'string') &&
+          element.exportLayout.lines.join('').length <= 20_000 &&
+          finiteNumber(element.exportLayout.fontSize) && element.exportLayout.fontSize >= 4 && element.exportLayout.fontSize <= 500 &&
+          element.exportLayout.lines.join(' ').replace(/\s+/g, ' ').trim() === element.text.replace(/\s+/g, ' ').trim()
+        ))
     case 'image':
       return typeof element.assetId === 'string' && element.assetId.length <= 100 &&
-        ['image/png', 'image/jpeg'].includes(element.mimeType)
+        ['image/png', 'image/jpeg'].includes(element.mimeType) &&
+        (element.signatureId === undefined || (typeof element.signatureId === 'string' && element.signatureId.length <= 100))
     case 'rectangle':
     case 'ellipse':
       return validColor(element.strokeColor) &&
@@ -67,6 +81,8 @@ function validElement(element: any): element is PdfEditorElement {
         finiteNumber(element.strokeWidth) && element.strokeWidth >= 0 && element.strokeWidth <= 100
     case 'line':
     case 'arrow':
+    case 'checkmark':
+    case 'crossmark':
       return validColor(element.strokeColor) &&
         finiteNumber(element.strokeWidth) && element.strokeWidth > 0 && element.strokeWidth <= 100
     case 'drawing':
@@ -99,7 +115,19 @@ export function parseEditPayload(input: unknown): PdfEditPayload {
   if (payload.elements.some((element: PdfEditorElement) => element.pageIndex >= payload.pages.length)) {
     throw new Error('An added element refers to a page that does not exist.')
   }
+  if (new Set(payload.elements.map((element: PdfEditorElement) => element.id)).size !== payload.elements.length) {
+    throw new Error('Added elements must have unique IDs.')
+  }
   return payload
+}
+
+export function validateAssetIds(ids: unknown, elements: PdfEditorElement[]): string[] {
+  if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string' && id.length > 0 && id.length <= 100)) throw new Error('The image asset list is invalid.')
+  const assetIds = ids as string[]
+  if (new Set(assetIds).size !== assetIds.length) throw new Error('Image asset IDs must be unique.')
+  const referenced = new Set(elements.filter(element => element.type === 'image').map(element => element.assetId))
+  if (assetIds.length !== referenced.size || assetIds.some(id => !referenced.has(id))) throw new Error('The image assets do not match the edit data.')
+  return assetIds
 }
 
 export function safeOutputBaseName(fileName: string): string {

@@ -4,6 +4,13 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face { font-family: 'ConvertPro Noto Sans'; src: url('/fonts/NotoSans-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ConvertPro Noto Sans'; src: url('/fonts/NotoSans-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ConvertPro Noto Sans'; src: url('/fonts/NotoSans-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'ConvertPro Noto Sans'; src: url('/fonts/NotoSans-BoldItalic.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'ConvertPro Signature Serif'; src: url('/fonts/NotoSerif-Italic.ttf') format('truetype'); font-style: italic; font-display: swap; }
+@font-face { font-family: 'ConvertPro Signature Display'; src: url('/fonts/NotoSerifDisplay-Italic.ttf') format('truetype'); font-style: italic; font-display: swap; }
+
 @layer base {
   html {
     scroll-behavior: smooth;
@@ -132,6 +139,13 @@
 .pdf-editor-status { @apply flex min-h-9 items-center justify-between border-t border-gray-200 bg-white px-4 text-xs text-gray-600; }
 .pdf-fill-panel { @apply w-72 flex-none overflow-y-auto border-l border-gray-200 bg-white p-5 text-sm leading-6 text-gray-600; }
 .pdf-fill-panel h2 { @apply mb-3 text-lg font-bold text-gray-900; }
+.pdf-fill-panel input:not([type='checkbox']), .pdf-fill-panel textarea, .pdf-fill-panel select { @apply w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none; }
+.pdf-field-card { @apply rounded-xl border border-gray-200 bg-gray-50 p-3; }
+.pdf-field-card.active { @apply border-primary-500 bg-primary-50; }
+.pdf-fill-toolbar { @apply flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-1 text-sm text-gray-700; }
+.pdf-page-shell.is-placing .upper-canvas { cursor: crosshair !important; }
+.pdf-signature-backdrop { @apply fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4; }
+.pdf-signature-dialog { @apply max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl; }
 
 .pdf-page-shell {
   @apply relative flex-none overflow-hidden bg-white outline outline-1 outline-gray-300;

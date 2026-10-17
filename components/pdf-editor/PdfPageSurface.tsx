@@ -7,6 +7,7 @@ import {
   FabricImage,
   Group,
   Line,
+  Path,
   Point,
   Polyline,
   Rect,
@@ -17,7 +18,9 @@ import {
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api'
 import type { PageViewport } from 'pdfjs-dist/types/src/display/display_utils'
 import { normalizeDegrees, pdfToViewport, viewportRotation, viewportScale, viewportToPdf } from '../../lib/pdf/coordinates'
-import type { PdfDrawingElement, PdfEditorElement, PdfEditorTool, PdfHighlightElement, PdfPoint } from '../../types/pdfEditor'
+import { clientToPdfPoint, FIELD_DRAG_TYPE } from '../../lib/pdf/placement'
+import { browserTextLayout } from '../../lib/pdf/browserTextLayout'
+import type { PdfDrawingElement, PdfEditorElement, PdfEditorTool, PdfHighlightElement, PdfPoint, PdfTextElement } from '../../types/pdfEditor'
 
 interface PdfPageSurfaceProps {
   page: PDFPageProxy
@@ -37,6 +40,8 @@ interface PdfPageSurfaceProps {
   onAddDrawing: (element: PdfDrawingElement) => void
   onAddHighlights: (elements: PdfHighlightElement[]) => void
   onModify: (element: PdfEditorElement) => void
+  placingField?: boolean
+  onDropField?: (fieldId: string, pageIndex: number, point: PdfPoint) => void
 }
 
 function objectOptions(element: PdfEditorElement, viewport: PageViewport) {
@@ -86,6 +91,8 @@ export default function PdfPageSurface({
   onAddDrawing,
   onAddHighlights,
   onModify,
+  placingField = false,
+  onDropField,
 }: PdfPageSurfaceProps) {
   const backgroundRef = useRef<HTMLCanvasElement>(null)
   const shellRef = useRef<HTMLElement>(null)
@@ -181,23 +188,31 @@ export default function PdfPageSurface({
     const scale = viewportScale(viewport)
     let disposed = false
     const addObjects = async () => {
+      const notoFonts = elements.filter((item): item is PdfTextElement => item.type === 'text' && item.fontFamily === 'NotoSans')
+      if (notoFonts.length) {
+        await Promise.all(notoFonts.map(item => document.fonts.load(`${item.italic ? 'italic ' : ''}${item.bold ? 'bold ' : ''}16px "ConvertPro Noto Sans"`)))
+        if (disposed) return
+      }
       for (const editorElement of [...elements].sort((a, b) => a.zIndex - b.zIndex)) {
         const base = objectOptions(editorElement, viewport)
         let object: any
         switch (editorElement.type) {
-          case 'text':
-            object = new Textbox(editorElement.text, {
+          case 'text': {
+            const layout = browserTextLayout(editorElement)
+            object = new Textbox(layout.lines.join('\n'), {
               ...base,
               width: editorElement.width * scale,
-              fontSize: editorElement.fontSize * scale,
-              fontFamily: editorElement.fontFamily === 'TimesRoman' ? 'Times New Roman' : editorElement.fontFamily,
+              fontSize: layout.fontSize * scale,
+              fontFamily: editorElement.fontFamily === 'TimesRoman' ? 'Times New Roman' : editorElement.fontFamily === 'NotoSans' ? 'ConvertPro Noto Sans' : editorElement.fontFamily,
               fontWeight: editorElement.bold ? 'bold' : 'normal',
               fontStyle: editorElement.italic ? 'italic' : 'normal',
               underline: editorElement.underline,
+              textAlign: editorElement.textAlign ?? 'left',
               fill: editorElement.color,
               editable: false,
             })
             break
+          }
           case 'image': {
             const url = assetUrls[editorElement.assetId]
             if (!url) continue
@@ -243,6 +258,16 @@ export default function PdfPageSurface({
               strokeUniform: true,
             })
             break
+          case 'checkmark':
+          case 'crossmark': {
+            const w = editorElement.width * scale
+            const h = editorElement.height * scale
+            const path = editorElement.type === 'checkmark'
+              ? `M 0 ${h * 0.55} L ${w * 0.35} ${h} L ${w} 0`
+              : `M 0 ${h} L ${w} 0 M 0 0 L ${w} ${h}`
+            object = new Path(path, { ...base, fill: 'transparent', stroke: editorElement.strokeColor, strokeWidth: editorElement.strokeWidth * scale, strokeUniform: true })
+            break
+          }
           case 'arrow': {
             const length = editorElement.width * scale
             const line = new Line([0, 0, length, 0], { stroke: editorElement.strokeColor, strokeWidth: editorElement.strokeWidth * scale, strokeUniform: true })
@@ -310,6 +335,11 @@ export default function PdfPageSurface({
 
     canvas.on('mouse:down', (event: any) => {
       onActivate(pageIndex)
+      if (placingField) {
+        const rect = canvas.upperCanvasEl.getBoundingClientRect()
+        onAddAt(pageIndex, clientToPdfPoint(event.e.clientX, event.e.clientY, rect, viewport))
+        return
+      }
       if (tool === 'select' || tool === 'highlight') return
       const scene = canvas.getScenePoint(event.e)
       if (tool === 'draw') {
@@ -346,7 +376,7 @@ export default function PdfPageSurface({
       fabricRef.current = null
       void canvas.dispose()
     }
-  }, [assetUrls, drawColor, drawWidth, elements, onActivate, onAddAt, onAddDrawing, onModify, onSelect, pageIndex, renderVisible, tool, viewport])
+  }, [assetUrls, drawColor, drawWidth, elements, onActivate, onAddAt, onAddDrawing, onModify, onSelect, pageIndex, placingField, renderVisible, tool, viewport])
 
   const finishHighlight = (pointerEvent: ReactPointerEvent<HTMLDivElement>) => {
     const container = textLayerRef.current
@@ -386,10 +416,17 @@ export default function PdfPageSurface({
   return (
     <section
       ref={shellRef}
-      className={`pdf-page-shell ${active ? 'active' : ''}`}
+      className={`pdf-page-shell ${active ? 'active' : ''} ${placingField ? 'is-placing' : ''}`}
       data-page-index={pageIndex}
       style={{ width: viewport.width, height: viewport.height }}
       onPointerDown={() => onActivate(pageIndex)}
+      onDragOver={event => { if (event.dataTransfer.types.includes(FIELD_DRAG_TYPE)) event.preventDefault() }}
+      onDrop={event => {
+        const fieldId = event.dataTransfer.getData(FIELD_DRAG_TYPE)
+        if (!fieldId || !onDropField) return
+        event.preventDefault()
+        onDropField(fieldId, pageIndex, clientToPdfPoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect(), viewport))
+      }}
       aria-label={`PDF page ${pageIndex + 1}`}
     >
       <canvas ref={backgroundRef} className="absolute inset-0" />

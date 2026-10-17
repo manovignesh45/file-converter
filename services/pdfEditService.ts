@@ -3,11 +3,13 @@ import { promisify } from 'util'
 import { tmpdir } from 'os'
 import path from 'path'
 import fs from 'fs/promises'
+import fontkit from '@pdf-lib/fontkit'
 import {
   BlendMode,
   degrees,
   PDFDocument,
   PDFFont,
+  PDFImage,
   PDFPage,
   rgb,
   StandardFonts,
@@ -21,6 +23,8 @@ import type {
   PdfTextElement,
 } from '../types/pdfEditor'
 import { safeOutputBaseName } from '../lib/pdf/validation'
+import { layoutText } from '../lib/pdf/textLayout'
+import { symbolSegments } from '../lib/pdf/symbols'
 
 const execFileAsync = promisify(execFile)
 
@@ -47,7 +51,13 @@ function hexToRgb(value: string) {
   )
 }
 
-function fontNameFor(element: PdfTextElement): StandardFonts {
+function fontNameFor(element: PdfTextElement): StandardFonts | 'NotoSans-Regular' | 'NotoSans-Bold' | 'NotoSans-Italic' | 'NotoSans-BoldItalic' {
+  if (element.fontFamily === 'NotoSans') {
+    if (element.bold && element.italic) return 'NotoSans-BoldItalic'
+    if (element.bold) return 'NotoSans-Bold'
+    if (element.italic) return 'NotoSans-Italic'
+    return 'NotoSans-Regular'
+  }
   if (element.fontFamily === 'TimesRoman') {
     if (element.bold && element.italic) return StandardFonts.TimesRomanBoldItalic
     if (element.bold) return StandardFonts.TimesRomanBold
@@ -66,51 +76,32 @@ function fontNameFor(element: PdfTextElement): StandardFonts {
   return StandardFonts.Helvetica
 }
 
-function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  const output: string[] = []
-  for (const paragraph of text.split(/\r?\n/)) {
-    if (!paragraph) {
-      output.push('')
-      continue
-    }
-    const words = paragraph.split(/\s+/)
-    let line = ''
-    for (const word of words) {
-      const candidate = line ? `${line} ${word}` : word
-      if (line && font.widthOfTextAtSize(candidate, size) > maxWidth) {
-        output.push(line)
-        line = word
-      } else {
-        line = candidate
-      }
-    }
-    output.push(line)
-  }
-  return output
-}
-
 function drawText(page: PDFPage, element: PdfTextElement, font: PDFFont) {
-  const lineHeight = element.fontSize * 1.2
-  const lines = wrapText(element.text, font, element.fontSize, Math.max(element.width, element.fontSize))
-  lines.forEach((line, index) => {
-    const y = element.y + element.height - element.fontSize - index * lineHeight
-    if (y < element.y - lineHeight) return
+  const layout = element.exportLayout ?? layoutText(element.text, {
+    width: element.width, height: element.height, fontSize: element.fontSize,
+    minFontSize: element.minFontSize ?? 8, singleLine: element.singleLine ?? false, autoFit: element.autoFit ?? false,
+  }, (text, size) => font.widthOfTextAtSize(text, size))
+  const lineHeight = layout.fontSize * 1.2
+  layout.lines.forEach((line, index) => {
+    if (!line) return
+    const y = element.y + element.height - layout.fontSize - index * lineHeight
+    const width = font.widthOfTextAtSize(line, layout.fontSize)
+    const x = element.x + (element.textAlign === 'center' ? (element.width - width) / 2 : element.textAlign === 'right' ? element.width - width : 0)
     page.drawText(line, {
-      x: element.x,
+      x,
       y,
-      size: element.fontSize,
+      size: layout.fontSize,
       font,
       color: hexToRgb(element.color),
       opacity: element.opacity,
       rotate: degrees(element.rotation),
-      maxWidth: Math.max(element.width, element.fontSize),
     })
     if (element.underline && line) {
-      const width = Math.min(font.widthOfTextAtSize(line, element.fontSize), element.width)
+      const radians = element.rotation * Math.PI / 180
       page.drawLine({
-        start: { x: element.x, y: y - 1.5 },
-        end: { x: element.x + width, y: y - 1.5 },
-        thickness: Math.max(0.5, element.fontSize / 18),
+        start: { x: x + 1.5 * Math.sin(radians), y: y - 1.5 * Math.cos(radians) },
+        end: { x: x + width * Math.cos(radians) + 1.5 * Math.sin(radians), y: y + width * Math.sin(radians) - 1.5 * Math.cos(radians) },
+        thickness: Math.max(0.5, layout.fontSize / 18),
         color: hexToRgb(element.color),
         opacity: element.opacity,
       })
@@ -223,11 +214,13 @@ export class PdfEditService {
       const originalPageSizes = pdfDocument.getPages().map(page => page.getSize())
 
       const assetMap = new Map(assets.map(asset => [asset.id, asset]))
-      const fontCache = new Map<StandardFonts, PDFFont>()
+      const fontCache = new Map<string, PDFFont>()
+      const imageCache = new Map<string, PDFImage>()
+      pdfDocument.registerFontkit(fontkit)
 
       for (const element of [...payload.elements].sort((a, b) => a.pageIndex - b.pageIndex || a.zIndex - b.zIndex)) {
         const page = pdfDocument.getPage(element.pageIndex)
-        await this.drawElement(pdfDocument, page, element, assetMap, fontCache)
+        await this.drawElement(pdfDocument, page, element, assetMap, fontCache, imageCache)
       }
 
       const bytes = await pdfDocument.save({ useObjectStreams: true })
@@ -266,25 +259,36 @@ export class PdfEditService {
     page: PDFPage,
     element: PdfEditorElement,
     assets: Map<string, PdfEditAsset>,
-    fonts: Map<StandardFonts, PDFFont>,
+    fonts: Map<string, PDFFont>,
+    images: Map<string, PDFImage>,
   ) {
     switch (element.type) {
       case 'text': {
         const name = fontNameFor(element)
         let font = fonts.get(name)
         if (!font) {
-          font = await document.embedFont(name)
+          font = name.startsWith('NotoSans-')
+            ? await document.embedFont(await fs.readFile(path.join(process.cwd(), 'public', 'fonts', `${name}.ttf`)), { subset: true })
+            : await document.embedFont(name as StandardFonts)
           fonts.set(name, font)
         }
-        drawText(page, element, font)
+        try { drawText(page, element, font) } catch (error) {
+          const message = error instanceof Error ? error.message : ''
+          if (/encode|glyph|unicode/i.test(message)) throw new Error('The selected font cannot render one or more characters. Try Noto Sans or change the text.')
+          throw error
+        }
         return
       }
       case 'image': {
         const asset = assets.get(element.assetId)
         if (!asset) throw new Error('An image used in the editor is missing from the export.')
-        const image = asset.mimeType === 'image/png'
-          ? await document.embedPng(asset.buffer)
-          : await document.embedJpg(asset.buffer)
+        let image = images.get(element.assetId)
+        if (!image) {
+          image = asset.mimeType === 'image/png'
+            ? await document.embedPng(asset.buffer)
+            : await document.embedJpg(asset.buffer)
+          images.set(element.assetId, image)
+        }
         page.drawImage(image, {
           x: element.x,
           y: element.y,
@@ -326,6 +330,10 @@ export class PdfEditService {
       case 'line':
       case 'arrow':
         drawLineOrArrow(page, element)
+        return
+      case 'checkmark':
+      case 'crossmark':
+        symbolSegments(element).forEach(([start, end]) => page.drawLine({ start, end, thickness: element.strokeWidth, color: hexToRgb(element.strokeColor), opacity: element.opacity }))
         return
       case 'drawing':
         drawFreehand(page, element)

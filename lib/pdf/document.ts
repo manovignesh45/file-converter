@@ -5,7 +5,7 @@ export function sourcePageId(sourcePageIndex: number): string {
 }
 
 export function createEditorDocument(id: string, name: string): PdfEditorDocument {
-  return { id, name, pages: [], elements: [] }
+  return { id, name, pages: [], elements: [], fields: [] }
 }
 
 export function createDocumentPage(info: PdfPageInfo, bounds: [number, number, number, number]): PdfDocumentPage {

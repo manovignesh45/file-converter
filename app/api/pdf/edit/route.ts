@@ -7,6 +7,7 @@ import {
   MAX_IMAGE_BYTES,
   MAX_PDF_BYTES,
   parseEditPayload,
+  validateAssetIds,
 } from '../../../../lib/pdf/validation'
 
 export const runtime = 'nodejs'
@@ -51,8 +52,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'The image asset list is invalid.' }, { status: 400 })
     }
     const assetFiles = formData.getAll('assets')
-    if (!Array.isArray(assetIds) || assetIds.length !== assetFiles.length) {
-      return NextResponse.json({ error: 'The image assets do not match the edit data.' }, { status: 400 })
+    let validatedAssetIds: string[]
+    try { validatedAssetIds = validateAssetIds(assetIds, payload.elements) } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'The image asset list is invalid.' }, { status: 400 }) }
+    if (validatedAssetIds.length !== assetFiles.length) return NextResponse.json({ error: 'The image assets do not match the edit data.' }, { status: 400 })
+    if (assetFiles.length > 100 || assetFiles.reduce((total, asset) => total + (asset instanceof File ? asset.size : 0), 0) > 100 * 1024 * 1024) {
+      return NextResponse.json({ error: 'This edit contains too many or too-large combined image assets.' }, { status: 413 })
     }
 
     const assets: PdfEditAsset[] = []
@@ -66,6 +70,9 @@ export async function POST(request: NextRequest) {
       if (!mimeType) {
         return NextResponse.json({ error: 'Added images must be valid PNG or JPEG files.' }, { status: 415 })
       }
+      if (payload.elements.some(element => element.type === 'image' && element.assetId === validatedAssetIds[index] && element.mimeType !== mimeType)) {
+        return NextResponse.json({ error: 'An image type does not match its referenced asset.' }, { status: 400 })
+      }
       let metadata
       try {
         metadata = await sharp(buffer, { limitInputPixels: 40_000_000 }).metadata()
@@ -75,7 +82,7 @@ export async function POST(request: NextRequest) {
       if (!metadata.width || !metadata.height) {
         return NextResponse.json({ error: 'An added image could not be decoded.' }, { status: 415 })
       }
-      assets.push({ id: String(assetIds[index]).slice(0, 100), mimeType, buffer })
+      assets.push({ id: validatedAssetIds[index], mimeType, buffer })
     }
 
     const result = await new PdfEditService().exportPdf(
@@ -96,9 +103,9 @@ export async function POST(request: NextRequest) {
       }],
     })
   } catch (error) {
-    console.error('PDF edit export failed:', error)
+    console.error('PDF edit export failed:', error instanceof Error ? error.name : 'unknown error')
     const message = error instanceof Error ? error.message : 'The edited PDF could not be exported.'
-    const status = /password|encrypted|invalid|corrupt|parse|xref|trailer/i.test(message) ? 422 : 500
+    const status = /password|encrypted|invalid|corrupt|parse|xref|trailer|font|character/i.test(message) ? 422 : 500
     return NextResponse.json({ error: message, details: message }, { status })
   }
 }

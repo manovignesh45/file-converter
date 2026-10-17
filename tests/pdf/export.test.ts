@@ -45,4 +45,45 @@ describe('PDF edit export', () => {
     expect(result.processedName).toMatch(/^mixed_sizes_edited_[a-f0-9]{8}\.pdf$/)
     expect(result.processedSize).toBeGreaterThan(0)
   })
+
+  it('exports Unicode field text, vector marks, and repeated signature assets', async () => {
+    const source = await PDFDocument.create()
+    source.addPage([400, 600])
+    const input = Buffer.from(await source.save())
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+    const payload: PdfEditPayload = {
+      version: 1,
+      pages: [{ pageIndex: 0, width: 400, height: 600, rotation: 0 }],
+      elements: [
+        { id: 'name', type: 'text', pageIndex: 0, zIndex: 0, x: 40, y: 450, width: 250, height: 50, rotation: 0, opacity: 1, text: 'José Müller', fontFamily: 'NotoSans', fontSize: 20, minFontSize: 10, autoFit: true, singleLine: true, textAlign: 'center', color: '#112233', bold: false, italic: false, underline: false },
+        { id: 'mark', type: 'drawing', pageIndex: 0, zIndex: 1, x: 40, y: 300, width: 22, height: 22, rotation: 0, opacity: 1, points: [{ x: 40, y: 309 }, { x: 48, y: 300 }, { x: 62, y: 322 }], color: '#112233', strokeWidth: 3 },
+        { id: 'signature-1', type: 'image', pageIndex: 0, zIndex: 2, x: 80, y: 200, width: 120, height: 40, rotation: 0, opacity: 1, assetId: 'signature', mimeType: 'image/png' },
+        { id: 'signature-2', type: 'image', pageIndex: 0, zIndex: 3, x: 80, y: 120, width: 120, height: 40, rotation: 0, opacity: 1, assetId: 'signature', mimeType: 'image/png' },
+      ],
+    }
+    const result = await new PdfEditService().exportPdf(input, 'fields.pdf', payload, [{ id: 'signature', mimeType: 'image/png', buffer: png }])
+    outputs.push(result.outputPath)
+    const bytes = new Uint8Array(await fs.readFile(result.outputPath))
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const opened = await pdfjs.getDocument({ data: bytes, useSystemFonts: true }).promise
+    const content = await (await opened.getPage(1)).getTextContent()
+    expect(content.items.map(item => 'str' in item ? item.str : '').join(' ')).toContain('José Müller')
+    const name = content.items.find(item => 'str' in item && item.str.includes('José Müller'))
+    expect(name && 'transform' in name ? name.transform[4] : 0).toBeGreaterThan(40)
+    expect(name && 'transform' in name ? name.transform[5] : 0).toBeCloseTo(480, 0)
+    expect(opened.numPages).toBe(1)
+    await opened.destroy()
+  })
+
+  it('reports unsupported standard-font characters clearly', async () => {
+    const source = await PDFDocument.create()
+    source.addPage([300, 500])
+    const input = Buffer.from(await source.save())
+    const payload: PdfEditPayload = {
+      version: 1,
+      pages: [{ pageIndex: 0, width: 300, height: 500, rotation: 0 }],
+      elements: [{ id: 'text', type: 'text', pageIndex: 0, zIndex: 0, x: 20, y: 100, width: 200, height: 40, rotation: 0, opacity: 1, text: 'Name ✓', fontFamily: 'Helvetica', fontSize: 16, color: '#000000', bold: false, italic: false, underline: false }],
+    }
+    await expect(new PdfEditService().exportPdf(input, 'unsupported.pdf', payload, [])).rejects.toThrow('Try Noto Sans')
+  })
 })

@@ -3,7 +3,7 @@
 Date: 2026-10-10  
 Audited commit: `4d83c95`  
 Requirements: [PDF Editor Redesign PRD](pdf-editor-redesign.md)  
-Status: **Phase 0 complete. Phase 1 implementation started; Phases 2–5 are proposed work.**
+Status: **Phase 0 complete. Phase 1 committed. Phase 2 feature code implemented; browser acceptance checks remain. Phases 3–5 are proposed work.**
 
 The Phase 0 audit added only this planning document. Phase 1 changes began afterward.
 
@@ -11,7 +11,15 @@ The Phase 0 audit added only this planning document. Phase 1 changes began after
 
 The editor now keeps page metadata and elements in one history-backed document snapshot, assigns stable source-page IDs, and projects that state to the existing version-1 export payload. The shell includes mode navigation, a contextual top toolbar, lazy page thumbnails, collapsible side panels, and a status bar. Duplicate, internal copy/paste, arrow-key nudging, image replacement, and typing-safe undo shortcuts have been added. Page canvases render when near the viewport.
 
-Phase 1 remains in progress. The local browser was unavailable during implementation, so visual interaction and preview/export geometry checks are still required before the Phase 1 exit gate can be claimed. The next verification step is a browser run through text/shape/image selection and formatting, mode switches, sidebar collapse, zoom, and export on mixed-size/rotated PDFs.
+Phase 1 code is committed, but the local browser was unavailable during implementation. Visual interaction and preview/export geometry checks are still required before its exit gate can be claimed. The next verification step is a browser run through text/shape/image selection and formatting, mode switches, sidebar collapse, zoom, and export on mixed-size/rotated PDFs.
+
+### Phase 2 progress (2026-10-10)
+
+Quick Fill now has reusable name, address, place, date, custom text, initials, and vector mark definitions in the shared document state. Source edits propagate only to linked text placements; direct instance edits detach. Click and drag placement use the page viewport transform. Current, selected, and all-page placement create fresh IDs in one history transaction and reject out-of-bounds multi-page placement. Text controls include alignment, single-line mode, wrapping, minimum-size fitting, and an overflow warning. The editor sends the preview's line breaks and fitted font size to the exporter. Bundled Noto fonts and fontkit support form text beyond the original standard-font set.
+
+Drawn, typed, and uploaded visual signatures can be previewed, placed repeatedly, renamed, and removed. Saving to the browser's IndexedDB library is an explicit choice; removing a library entry retains already placed images and their undo assets. Source strokes or typed text/style are retained with saved signatures. Export validation checks referenced assets and reuses embedded signature images.
+
+Unit and export tests, type-check, lint, and production build pass. The in-app browser was unavailable, so drag/drop, pointer drawing, responsive layout, signature library behavior in a real browser, and preview/export visual comparison remain unverified. Do not claim the Phase 2 exit gate until those checks pass.
 
 ## 1. Findings and recommended direction
 

@@ -48,7 +48,7 @@ export default function PdfEditorToolbar({ tool, onToolChange, onImageRequest, o
       </div>
       <div className="pdf-editor-context" aria-label="Selected object formatting">
         {selectedElement?.type === 'text' && <>
-          <select aria-label="Font family" value={selectedElement.fontFamily} onChange={event => update({ fontFamily: event.target.value as PdfFontFamily })}><option value="Helvetica">Helvetica</option><option value="TimesRoman">Times</option><option value="Courier">Courier</option></select>
+          <select aria-label="Font family" value={selectedElement.fontFamily} onChange={event => update({ fontFamily: event.target.value as PdfFontFamily })}><option value="Helvetica">Helvetica</option><option value="TimesRoman">Times</option><option value="Courier">Courier</option><option value="NotoSans">Noto Sans</option></select>
           <input aria-label="Font size" className="w-16" type="number" min="4" max="500" value={selectedElement.fontSize} onChange={event => update({ fontSize: Number(event.target.value) })} />
           <button className={`pdf-style-toggle ${selectedElement.bold ? 'active' : ''}`} aria-pressed={selectedElement.bold} onClick={() => update({ bold: !selectedElement.bold })}>B</button>
           <button className={`pdf-style-toggle italic ${selectedElement.italic ? 'active' : ''}`} aria-pressed={selectedElement.italic} onClick={() => update({ italic: !selectedElement.italic })}>I</button>
