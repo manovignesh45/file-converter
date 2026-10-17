@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import DragDropUploader from '../components/DragDropUploader'
 import OptionsPanel from '../components/OptionsPanel'
 import ProgressModal from '../components/ProgressModal'
 import ResultsView from '../components/ResultsView'
 import Header from '../components/Header'
 import PdfEditor from '../components/pdf-editor/PdfEditor'
+import ToolDirectory, { ToolId, tools } from '../components/ToolDirectory'
 import { ImageFile, ConversionOptions, JobProgress } from '../types'
 
 export default function Home() {
@@ -27,6 +28,38 @@ export default function Home() {
   }>>([])
   const [isCleaningUp, setIsCleaningUp] = useState(false)
   const [editorFile, setEditorFile] = useState<File | null>(null)
+  const [selectedTool, setSelectedTool] = useState<ToolId | null>(null)
+  const workspaceRef = useRef<HTMLDivElement>(null)
+  const isPdfTool = selectedTool?.startsWith('pdf-') ?? false
+  const hasIncompatibleFiles = images.some(image =>
+    isPdfTool ? image.file.type !== 'application/pdf' : !image.file.type.startsWith('image/')
+  )
+
+  const selectTool = (tool: ToolId) => {
+    const operations: Record<ToolId, ConversionOptions['operation']> = {
+      'image-compress': 'compress',
+      'image-resize': 'resize',
+      'image-convert': 'convert',
+      'images-to-pdf': 'convert',
+      'image-watermark': 'watermark',
+      'pdf-edit': 'pdf-edit',
+      'pdf-compress': 'pdf-compress',
+      'pdf-unlock': 'pdf-remove-password',
+    }
+    setSelectedTool(tool)
+    setOptions(previous => ({
+      ...previous,
+      operation: operations[tool],
+      ...(tool === 'images-to-pdf' ? { outputFormat: 'pdf' as const } : {}),
+      ...(tool === 'image-convert' ? { outputFormat: 'jpg' as const } : {}),
+      ...(tool === 'image-watermark' ? {
+        watermarkText: previous.watermarkText || 'Sample Watermark',
+        watermarkPosition: previous.watermarkPosition || 'bottom-right',
+        watermarkColor: previous.watermarkColor || '#ffffff',
+      } : {}),
+    }))
+    requestAnimationFrame(() => workspaceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
 
   useEffect(() => {
     if (!editorFile) return
@@ -47,11 +80,22 @@ export default function Home() {
 
   const handleOptionsChange = useCallback((newOptions: ConversionOptions) => {
     setOptions(newOptions)
+    const toolForOperation: Record<ConversionOptions['operation'], ToolId> = {
+      compress: 'image-compress',
+      resize: 'image-resize',
+      convert: newOptions.outputFormat === 'pdf' ? 'images-to-pdf' : 'image-convert',
+      pdf: 'images-to-pdf',
+      watermark: 'image-watermark',
+      'pdf-edit': 'pdf-edit',
+      'pdf-compress': 'pdf-compress',
+      'pdf-remove-password': 'pdf-unlock',
+    }
+    setSelectedTool(toolForOperation[newOptions.operation])
   }, [])
 
   // Check if processing can proceed
   const canProcess = useCallback(() => {
-    if (images.length === 0) return false
+    if (images.length === 0 || hasIncompatibleFiles) return false
     
     // For PDF password removal, password is required
     if (options.operation === 'pdf-remove-password') {
@@ -63,7 +107,7 @@ export default function Home() {
     }
     
     return true
-  }, [images, options.operation, options.pdfPassword])
+  }, [images, hasIncompatibleFiles, options.operation, options.pdfPassword])
 
   const handleProcess = async () => {
     if (images.length === 0) return
@@ -154,6 +198,7 @@ export default function Home() {
       operation: 'compress',
       compressionQuality: 80,
     })
+    setSelectedTool(null)
   }
 
   return (
@@ -173,21 +218,7 @@ export default function Home() {
           />
         </div>
       ) : (
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 max-w-7xl animate-fade-in">
-        <div className="text-center mb-12 sm:mb-16">
-          <span className="inline-block py-1 px-3 rounded-full bg-primary-100 text-primary-700 text-sm font-semibold mb-4 animate-slide-up">
-            #1 Free Online Converter
-          </span>
-          <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight text-gray-900 mb-6 animate-slide-up animate-delay-100">
-            Convert Files <br className="hidden sm:block" />
-            <span className="text-gradient">With Superpowers</span>
-          </h1>
-          <p className="text-lg sm:text-xl text-gray-500 max-w-2xl mx-auto animate-slide-up animate-delay-200 leading-relaxed px-4">
-            Compress, resize, and transform your images and PDFs securely. 
-            All processing happens locally or on secure servers.
-          </p>
-        </div>
-
+      <div className="container mx-auto max-w-7xl px-4 pb-12 pt-24 sm:px-6 lg:px-8">
         {results.length > 0 ? (
           <div className="animate-scale-in">
             <ResultsView 
@@ -197,27 +228,41 @@ export default function Home() {
             />
           </div>
         ) : (
-          <div className="flex flex-col lg:flex-row gap-8 max-w-7xl mx-auto animate-slide-up animate-delay-300">
-            <div className="lg:w-2/3 order-1 h-full">
-              <DragDropUploader 
-                images={images}
-                onImagesChange={handleImagesChange}
-                options={options}
-              />
-            </div>
-            
-            <div className="lg:w-1/3 order-2">
-              <div className="sticky top-6">
-                <OptionsPanel 
-                  options={options}
-                  onOptionsChange={handleOptionsChange}
-                  onProcess={handleProcess}
-                  canProcess={canProcess()}
-                  images={images}
-                />
+          <>
+            <ToolDirectory selectedTool={selectedTool} onSelect={selectTool} />
+            {selectedTool && (
+              <div ref={workspaceRef} className="tool-workspace scroll-mt-24">
+                <div className="tool-workspace-heading">
+                  <h2>{tools.find(tool => tool.id === selectedTool)?.title}</h2>
+                  <p>Add your files, adjust the settings, and start processing.</p>
+                </div>
+                {hasIncompatibleFiles && (
+                  <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
+                    The files in your queue do not match this tool. Clear them and upload {isPdfTool ? 'PDFs' : 'images'} to continue.
+                  </div>
+                )}
+                <div className="flex max-w-7xl flex-col gap-8 lg:flex-row">
+                  <div className="order-1 h-full lg:w-2/3">
+                    <DragDropUploader
+                      images={images}
+                      onImagesChange={handleImagesChange}
+                      options={options}
+                    />
+                  </div>
+                  <div className="order-2 lg:w-1/3">
+                    <OptionsPanel
+                      options={options}
+                      onOptionsChange={handleOptionsChange}
+                      onProcess={handleProcess}
+                      canProcess={canProcess()}
+                      images={images}
+                      lockOperation
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            )}
+          </>
         )}
       </div>
       )}

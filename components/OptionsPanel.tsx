@@ -59,9 +59,10 @@ interface OptionsPanelProps {
   onProcess: () => void
   canProcess: boolean
   images: Array<{ id: string; file: File; preview: string; order: number; estimatedSize?: number; originalSize: number; isPdf?: boolean }>
+  lockOperation?: boolean
 }
 
-export default function OptionsPanel({ options, onOptionsChange, onProcess, canProcess, images }: OptionsPanelProps) {
+export default function OptionsPanel({ options, onOptionsChange, onProcess, canProcess, images, lockOperation = false }: OptionsPanelProps) {
   // Analyze uploaded file types
   const fileTypes = {
     hasImages: images.some(img => img.file.type.startsWith('image/')),
@@ -120,6 +121,7 @@ export default function OptionsPanel({ options, onOptionsChange, onProcess, canP
 
   // Auto-select operation based on file types when files change
   useEffect(() => {
+    if (lockOperation) return
     if (images.length > 0 && availableOperations.length > 0) {
       const currentOperationAvailable = availableOperations.some(op => op.value === options.operation)
       
@@ -131,7 +133,7 @@ export default function OptionsPanel({ options, onOptionsChange, onProcess, canP
         }
       }
     }
-  }, [images.length, fileTypes.hasImages, fileTypes.hasPDFs, options.operation, updateOption, availableOperations])
+  }, [images.length, fileTypes.hasImages, fileTypes.hasPDFs, options.operation, updateOption, availableOperations, lockOperation])
 
   return (
     <div className="card sticky top-6 h-fit backdrop-blur-xl bg-white/50 border-0 shadow-xl ring-1 ring-black/5">
@@ -146,7 +148,7 @@ export default function OptionsPanel({ options, onOptionsChange, onProcess, canP
       {images.length > 0 ? (
         <>
           {/* Operation Type */}
-          <div className="mb-8">
+          {!lockOperation && <div className="mb-8">
             <label className="label-text">Operation</label>
             
             <div className="grid grid-cols-1 gap-2">
@@ -186,7 +188,7 @@ export default function OptionsPanel({ options, onOptionsChange, onProcess, canP
                 )
               })}
             </div>
-          </div>
+          </div>}
 
           {/* Dynamic Options based on Operation */}
           <div className="space-y-6">

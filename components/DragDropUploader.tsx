@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState, useEffect } from 'react'
-import { useDropzone } from 'react-dropzone'
+import { useDropzone, type Accept } from 'react-dropzone'
 import {
   DndContext,
   closestCenter,
@@ -105,6 +105,9 @@ export default function DragDropUploader({ images, onImagesChange, options }: Dr
   const [estimatedSizes, setEstimatedSizes] = useState<{ [key: string]: number }>({})
   const [uploadError, setUploadError] = useState<string | null>(null)
   const isPdfOperation = options.operation.startsWith('pdf-')
+  const acceptedTypes: Accept = isPdfOperation
+    ? { 'application/pdf': ['.pdf'] }
+    : { 'image/*': ['.jpeg', '.jpg', '.png', '.webp', '.gif', '.bmp'] }
   
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -210,13 +213,10 @@ export default function DragDropUploader({ images, onImagesChange, options }: Dr
     onDrop,
     onDropRejected: (rejections) => {
       const tooLarge = rejections.some(rejection => rejection.errors.some(error => error.code === 'file-too-large'))
-      setUploadError(tooLarge ? 'Files must be 50 MB or smaller.' : 'Choose a supported image or PDF file.')
+      setUploadError(tooLarge ? 'Files must be 50 MB or smaller.' : `Choose ${isPdfOperation ? 'a PDF' : 'a supported image'} file.`)
     },
-    accept: {
-      'image/*': ['.jpeg', '.jpg', '.png', '.webp', '.gif', '.bmp'],
-      'application/pdf': ['.pdf']
-    },
-    multiple: true,
+    accept: acceptedTypes,
+    multiple: options.operation !== 'pdf-edit',
     maxSize: 50 * 1024 * 1024,
   })
 
@@ -301,7 +301,7 @@ export default function DragDropUploader({ images, onImagesChange, options }: Dr
               }
             </h3>
             <p className="text-sm text-gray-500 text-center leading-relaxed">
-              Supports JPG, PNG, WebP (Images) and PDF documents. 
+              {isPdfOperation ? 'Supports PDF documents.' : 'Supports JPG, PNG, WebP, GIF, and BMP images.'}
               <br/>Max file size: 50MB
             </p>
           </div>
