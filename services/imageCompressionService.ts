@@ -1,4 +1,4 @@
-import sharp from 'sharp'
+import sharp, { type Sharp } from 'sharp'
 import { v4 as uuidv4 } from 'uuid'
 import path from 'path'
 import fs from 'fs/promises'
@@ -105,7 +105,7 @@ export class ImageCompressionService {
   }
 
   private async compressToTargetSize(
-    pipeline: sharp.Sharp,
+    pipeline: Sharp,
     targetBytes: number,
     outputPath: string,
     originalName: string,
@@ -193,6 +193,10 @@ export class ImageCompressionService {
       } else {
         bestBuffer = minQualityBuffer
       }
+    }
+
+    if (!bestBuffer) {
+      throw new Error('Image compression did not produce an output.')
     }
 
     // Final verification - if still over target, throw error

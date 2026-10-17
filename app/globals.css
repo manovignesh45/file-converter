@@ -1,6 +1,15 @@
+@import 'pdfjs-dist/web/pdf_viewer.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@font-face { font-family: 'ConvertPro Noto Sans'; src: url('/fonts/NotoSans-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ConvertPro Noto Sans'; src: url('/fonts/NotoSans-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ConvertPro Noto Sans'; src: url('/fonts/NotoSans-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'ConvertPro Noto Sans'; src: url('/fonts/NotoSans-BoldItalic.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'ConvertPro Signature Serif'; src: url('/fonts/NotoSerif-Italic.ttf') format('truetype'); font-style: italic; font-display: swap; }
+@font-face { font-family: 'ConvertPro Signature Display'; src: url('/fonts/NotoSerifDisplay-Italic.ttf') format('truetype'); font-style: italic; font-display: swap; }
 
 @layer base {
   html {
@@ -27,6 +36,213 @@
 
   ::-webkit-scrollbar-thumb {
     @apply bg-gray-300 rounded-full hover:bg-gray-400 transition-colors;
+  }
+}
+
+/* PDF editor */
+.pdf-editor-page { height: 100vh; height: 100dvh; overflow: hidden; overscroll-behavior: none; }
+.pdf-editor-frame {
+  @apply relative mx-auto flex h-full min-h-0 max-w-[1800px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white;
+}
+
+.pdf-editor-header {
+  @apply flex min-h-16 items-center gap-3 border-b border-gray-200 bg-white px-3 sm:px-5;
+}
+
+.pdf-editor-commandbar {
+  @apply flex flex-none items-center gap-0.5;
+}
+
+.pdf-editor-body {
+  @apply relative flex min-h-0 flex-1 overflow-hidden;
+}
+
+.pdf-editor-toolbar {
+  @apply flex min-h-14 flex-wrap items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-1;
+}
+.pdf-editor-toolbar-wrap { @apply relative z-40 flex-none; }
+.pdf-editor-advanced { @apply absolute right-3 top-full z-50 mt-2 max-h-[min(70vh,36rem)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-gray-200 bg-white p-4 text-sm shadow-xl; }
+.pdf-editor-advanced .pdf-property-field { @apply text-sm; }
+
+.pdf-editor-tools, .pdf-editor-context {
+  @apply flex min-w-0 flex-wrap items-center gap-1;
+}
+
+.pdf-editor-context {
+  @apply flex-1;
+}
+
+.pdf-editor-context select, .pdf-editor-context input[type='number'] {
+  @apply h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm;
+}
+
+.pdf-toolbar-color, .pdf-toolbar-opacity {
+  @apply flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-gray-600;
+}
+
+.pdf-toolbar-color input { @apply h-8 w-9 cursor-pointer; }
+.pdf-toolbar-color input.pdf-toolbar-number { width: 4.5rem; min-width: 4.5rem; padding: 0.25rem 0.375rem; color: #0f172a; cursor: text; font-variant-numeric: tabular-nums; text-align: center; }
+.pdf-toolbar-opacity input { @apply w-16; }
+
+.pdf-editor-toolrail {
+  @apply flex items-center gap-1;
+}
+
+.pdf-tool-button {
+  @apply flex min-w-12 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1 text-[10px] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900;
+}
+
+.pdf-tool-button svg {
+  @apply h-5 w-5;
+}
+
+.pdf-tool-button.active {
+  @apply bg-primary-50 text-primary-700 ring-1 ring-primary-200;
+}
+
+.pdf-icon-button {
+  @apply inline-flex h-9 w-9 flex-none items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30 disabled:cursor-not-allowed disabled:opacity-30;
+}
+
+.pdf-icon-button svg {
+  @apply h-5 w-5;
+}
+
+.pdf-editor-pages {
+  @apply flex min-w-0 flex-1 flex-col items-center gap-8 overflow-auto bg-gray-200 px-4 pb-8 pt-8;
+  scroll-padding-top: 2rem;
+  overscroll-behavior: contain;
+}
+
+.pdf-thumbnail-sidebar {
+  @apply flex w-44 flex-none flex-col gap-4 overflow-y-auto border-r border-gray-200 bg-gray-50 p-3;
+  overscroll-behavior: contain;
+}
+
+.pdf-thumbnail {
+  @apply flex flex-col items-center gap-1 rounded-lg border-2 border-transparent p-2 text-xs text-gray-600 hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500;
+}
+
+.pdf-thumbnail.active { @apply border-primary-500 bg-white text-primary-700; }
+.pdf-thumbnail canvas { @apply max-w-full bg-white shadow-sm; }
+.pdf-sidebar-toggle {
+  @apply absolute top-2 z-40 flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500;
+}
+.pdf-sidebar-toggle { @apply left-2; }
+.pdf-sidebar-toggle svg { @apply h-5 w-5; }
+.pdf-editor-status { @apply flex min-h-9 items-center justify-between border-t border-gray-200 bg-white px-4 text-xs text-gray-600; }
+.pdf-fill-panel { position: relative; max-width: calc(100% - 20rem); overscroll-behavior: contain; @apply flex-none overflow-y-auto border-l border-gray-200 bg-white p-5 text-sm leading-6 text-gray-600; }
+.pdf-fill-panel[data-thumbnails='open'] { max-width: calc(100% - 31rem); }
+.pdf-fill-resize-handle { position: absolute; top: 0; bottom: 0; left: 0; z-index: 2; display: flex; width: 11px; align-items: center; justify-content: center; border-left: 2px solid transparent; color: #64748b; cursor: col-resize; touch-action: none; user-select: none; }
+.pdf-fill-resize-handle:hover, .pdf-fill-resize-handle:focus-visible { border-left-color: #4f46e5; background: #eef2ff; outline: none; }
+.pdf-fill-resize-handle span { font-size: 24px; line-height: 1; }
+.pdf-fill-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); align-items: start; gap: 0.75rem; }
+.pdf-fill-panel h2 { @apply mb-3 text-lg font-bold text-gray-900; }
+.pdf-fill-panel input:not([type='checkbox']), .pdf-fill-panel textarea, .pdf-fill-panel select { @apply w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none; }
+.pdf-field-card { @apply cursor-grab select-none rounded-xl border border-gray-200 bg-gray-50 p-3; touch-action: none; }
+.pdf-field-card:active { cursor: grabbing; }
+.pdf-field-card:focus-visible { @apply outline outline-2 outline-offset-2 outline-primary-500; }
+.pdf-field-card input, .pdf-field-card textarea { cursor: text; user-select: text; touch-action: auto; }
+.pdf-field-card select, .pdf-field-card button { cursor: pointer; user-select: none; touch-action: auto; }
+.pdf-field-card button:disabled { cursor: not-allowed; }
+.pdf-field-drag-preview { position: fixed; top: 0; left: 0; z-index: 9999; max-width: 240px; border: 1px solid #a5b4fc; border-radius: 8px; background: white; padding: 6px 10px; color: #0f172a; font: 16px sans-serif; white-space: pre-wrap; box-shadow: 0 4px 12px #0f172a33; pointer-events: none; display: flex; align-items: center; will-change: transform; }
+.pdf-field-drag-preview img { display: block; max-width: 200px; max-height: 72px; }
+.pdf-field-drag-preview.is-on-page { max-width: none; overflow: visible; border: 2px solid #4f46e5; border-radius: 0; background: rgb(255 255 255 / 70%); padding: 0; box-shadow: none; line-height: 1.2; }
+.pdf-field-drag-preview.is-on-page > span:first-child { display: block; width: 100%; overflow: hidden; padding: 0 4px; }
+.pdf-field-drag-preview.is-on-page img { max-width: 100%; max-height: 100%; }
+.pdf-field-drag-preview .pdf-field-preview-handle { display: none; }
+.pdf-field-drag-preview.is-on-page .pdf-field-preview-handle { display: block; }
+.pdf-field-preview-handle { @apply absolute h-2.5 w-2.5 rounded-full bg-primary-600; }
+.pdf-field-preview-handle.top-left { top: -6px; left: -6px; }
+.pdf-field-preview-handle.top-right { top: -6px; right: -6px; }
+.pdf-field-preview-handle.bottom-left { bottom: -6px; left: -6px; }
+.pdf-field-preview-handle.bottom-right { bottom: -6px; right: -6px; }
+.pdf-inline-font-controls { @apply absolute z-30 flex h-8 items-center gap-1 rounded-lg border border-primary-300 bg-white px-1 text-xs font-semibold text-gray-800 shadow-md; }
+.pdf-inline-font-controls button { @apply flex h-6 w-6 items-center justify-center rounded text-base hover:bg-primary-50 disabled:opacity-40; }
+.pdf-inline-font-controls span { @apply min-w-5 text-center; }
+.pdf-field-card.active { @apply border-primary-500 bg-primary-50; }
+.pdf-page-shell.is-placing .upper-canvas { cursor: crosshair !important; }
+.pdf-signature-backdrop { @apply fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4; }
+.pdf-signature-dialog { @apply max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl; }
+
+.pdf-page-shell {
+  @apply relative flex-none overflow-hidden bg-white outline outline-1 outline-gray-300;
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.12);
+}
+
+.pdf-page-shell:focus-within,
+.pdf-page-shell:hover {
+  @apply outline-2 outline-primary-400;
+}
+
+.pdf-page-shell.active {
+  @apply outline-2 outline-primary-600;
+}
+
+.pdf-page-number {
+  @apply pointer-events-none absolute bottom-2 right-2 z-30 rounded-md bg-gray-900/75 px-2 py-1 text-xs font-semibold text-white;
+}
+
+.pdf-editor-text-layer {
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pdf-editor-text-layer.is-selecting {
+  pointer-events: auto;
+  cursor: text;
+}
+
+.pdf-page-shell .canvas-container {
+  position: absolute !important;
+  inset: 0;
+  z-index: 3;
+}
+
+.pdf-page-shell:has(.pdf-editor-text-layer.is-selecting) .upper-canvas {
+  pointer-events: none !important;
+}
+
+.pdf-property-field {
+  @apply block text-sm font-medium text-gray-700;
+}
+
+.pdf-property-field input,
+.pdf-property-field select,
+.pdf-property-field textarea {
+  @apply mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20;
+}
+
+.pdf-property-field input[type='range'] {
+  @apply px-0;
+}
+
+.pdf-property-label {
+  @apply flex items-center justify-between gap-3 text-sm font-medium text-gray-700;
+}
+
+.pdf-property-label input[type='color'] {
+  @apply h-8 w-12 cursor-pointer rounded-md border border-gray-200 bg-white p-1;
+}
+
+.pdf-style-toggle {
+  @apply rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50;
+}
+
+.pdf-style-toggle.active {
+  @apply border-primary-300 bg-primary-50 text-primary-700;
+}
+
+@media (max-width: 767px) {
+  .pdf-thumbnail-sidebar { position: absolute; top: 0; left: 0; bottom: 0; z-index: 30; width: min(11rem, 70vw); box-shadow: 8px 0 20px rgba(15, 23, 42, 0.14); }
+  .pdf-fill-panel, .pdf-fill-panel[data-thumbnails='open'] { position: absolute; top: 0; right: 0; bottom: 0; z-index: 30; max-width: 92vw; }
+  .pdf-editor-commandbar { margin-left: auto; }
+  .pdf-editor-toolbar { max-height: 9rem; overflow-y: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdf-editor-pages {
+    scroll-behavior: auto;
   }
 }
 

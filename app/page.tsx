@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import DragDropUploader from '../components/DragDropUploader'
 import OptionsPanel from '../components/OptionsPanel'
 import ProgressModal from '../components/ProgressModal'
 import ResultsView from '../components/ResultsView'
 import Header from '../components/Header'
+import PdfEditor from '../components/pdf-editor/PdfEditor'
 import { ImageFile, ConversionOptions, JobProgress } from '../types'
 
 export default function Home() {
@@ -25,6 +26,20 @@ export default function Home() {
     pageCount?: number
   }>>([])
   const [isCleaningUp, setIsCleaningUp] = useState(false)
+  const [editorFile, setEditorFile] = useState<File | null>(null)
+
+  useEffect(() => {
+    if (!editorFile) return
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    const previousBodyOverflow = document.body.style.overflow
+    window.scrollTo(0, 0)
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow
+      document.body.style.overflow = previousBodyOverflow
+    }
+  }, [editorFile])
 
   const handleImagesChange = useCallback((newImages: ImageFile[]) => {
     setImages(newImages)
@@ -42,12 +57,21 @@ export default function Home() {
     if (options.operation === 'pdf-remove-password') {
       return !!(options.pdfPassword && options.pdfPassword.trim().length > 0)
     }
+
+    if (options.operation === 'pdf-edit') {
+      return images.length === 1 && images[0].file.type === 'application/pdf'
+    }
     
     return true
-  }, [images.length, options.operation, options.pdfPassword])
+  }, [images, options.operation, options.pdfPassword])
 
   const handleProcess = async () => {
     if (images.length === 0) return
+
+    if (options.operation === 'pdf-edit') {
+      setEditorFile(images[0].file)
+      return
+    }
 
     const jobId = Date.now().toString()
     setCurrentJob({
@@ -106,6 +130,10 @@ export default function Home() {
       // Call cleanup API to delete processed files
       const response = await fetch('/api/cleanup', {
         method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: results.map(file => typeof file === 'string' ? file : file.fileName),
+        }),
       })
       if (response.ok) {
         const result = await response.json()
@@ -129,9 +157,22 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen pb-20">
+    <main className={editorFile ? 'pdf-editor-page' : 'min-h-screen pb-20'}>
       <Header />
-      
+
+      {editorFile ? (
+        <div className="box-border h-full px-2 pb-4 pt-24 sm:px-4">
+          <PdfEditor
+            file={editorFile}
+            initialPassword={options.pdfPassword}
+            onCancel={() => setEditorFile(null)}
+            onExported={(files) => {
+              setResults(files)
+              setEditorFile(null)
+            }}
+          />
+        </div>
+      ) : (
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 max-w-7xl animate-fade-in">
         <div className="text-center mb-12 sm:mb-16">
           <span className="inline-block py-1 px-3 rounded-full bg-primary-100 text-primary-700 text-sm font-semibold mb-4 animate-slide-up">
@@ -179,8 +220,9 @@ export default function Home() {
           </div>
         )}
       </div>
+      )}
 
-      {currentJob && (
+      {currentJob && !editorFile && (
         <ProgressModal 
           job={currentJob}
           onClose={clearJob}

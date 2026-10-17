@@ -8,7 +8,7 @@ export function middleware(request: NextRequest) {
       status: 200,
       headers: {
         'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || 'same-origin',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Max-Age': '86400',
       },
@@ -21,7 +21,7 @@ export function middleware(request: NextRequest) {
   // Add CORS headers to API routes
   if (request.nextUrl.pathname.startsWith('/api')) {
     response.headers.set('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || 'same-origin')
-    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
     response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   }
 

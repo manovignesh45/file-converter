@@ -47,6 +47,12 @@ const Unlock = ({ className }: { className?: string }) => (
   </svg>
 )
 
+const Edit = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 13H9v-2.828l6.586-6.586z" />
+  </svg>
+)
+
 interface OptionsPanelProps {
   options: ConversionOptions
   onOptionsChange: (options: ConversionOptions) => void
@@ -79,6 +85,7 @@ export default function OptionsPanel({ options, onOptionsChange, onProcess, canP
 
     if (fileTypes.hasPDFs) {
       operations.push(
+        { value: 'pdf-edit', label: 'Edit PDF', desc: 'Add text, images and markup', icon: Edit },
         { value: 'pdf-compress', label: 'Compress PDF', desc: 'Reduce PDF size', icon: FileMinus },
         { value: 'pdf-remove-password', label: 'Unlock PDF', desc: 'Remove password', icon: Unlock }
       )
@@ -382,7 +389,7 @@ export default function OptionsPanel({ options, onOptionsChange, onProcess, canP
                   : 'bg-gray-300 cursor-not-allowed'
               }`}
             >
-              {options.operation === 'pdf-remove-password' ? 'Unlock PDF' : 'Start Processing'}
+              {options.operation === 'pdf-remove-password' ? 'Unlock PDF' : options.operation === 'pdf-edit' ? 'Open Editor' : 'Start Processing'}
             </button>
           </div>
         </>

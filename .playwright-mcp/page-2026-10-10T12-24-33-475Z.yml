@@ -1,0 +1,27 @@
+- main [ref=e3]:
+  - generic [ref=e6]:
+    - heading "ConvertPro" [level=1] [ref=e12]
+    - navigation [ref=e13]:
+      - button "About" [ref=e14] [cursor=pointer]
+      - link [ref=e17] [cursor=pointer]:
+        - /url: https://github.com/manovignesh46
+  - generic [ref=e20]:
+    - generic [ref=e21]:
+      - generic [ref=e22]: "#1 Free Online Converter"
+      - heading "Convert Files With Superpowers" [level=1] [ref=e23]
+      - paragraph [ref=e24]: Compress, resize, and transform your images and PDFs securely. All processing happens locally or on secure servers.
+    - generic [ref=e25]:
+      - generic [ref=e28]:
+        - generic [ref=e30]:
+          - heading "Upload Images" [level=2] [ref=e31]
+          - paragraph [ref=e34]: Process your images locally and securely
+        - generic [ref=e35] [cursor=pointer]:
+          - button "Choose File" [ref=e36]
+          - generic [ref=e37]:
+            - heading "Click or Drag files here" [level=3] [ref=e41]
+            - paragraph [ref=e42]: "Supports JPG, PNG, WebP (Images) and PDF documents.Max file size: 50MB"
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - heading "Settings" [level=2] [ref=e47]
+          - paragraph [ref=e51]: Configure processing options
+        - paragraph [ref=e53]: Upload files to configure options

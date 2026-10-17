@@ -16,6 +16,9 @@ export async function GET(
   }
 
   try {
+    if (path.basename(fileName) !== fileName || fileName.includes('..')) {
+      return NextResponse.json({ error: 'Invalid file name' }, { status: 400 })
+    }
     const filePath = path.join(UPLOAD_DIR, fileName)
 
     // Check if file exists
@@ -29,7 +32,8 @@ export async function GET(
 
     const headers = new Headers()
     headers.append('Content-Disposition', `attachment; filename="${fileName}"`) 
-    headers.append('Content-Type', 'application/octet-stream')
+    headers.append('Content-Type', path.extname(fileName).toLowerCase() === '.pdf' ? 'application/pdf' : 'application/octet-stream')
+    headers.append('X-Content-Type-Options', 'nosniff')
 
     return new NextResponse(fileBuffer, {
       status: 200,

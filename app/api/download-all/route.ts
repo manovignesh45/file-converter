@@ -3,7 +3,7 @@ import path from 'path'
 import fs from 'fs'
 import archiver from 'archiver'
 
-const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads')
+const UPLOAD_DIR = path.join(process.cwd(), 'public', 'processed')
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
 
         // Add files to the archive
         for (const fileName of files) {
+          if (typeof fileName !== 'string' || path.basename(fileName) !== fileName || fileName.includes('..')) continue
           const filePath = path.join(UPLOAD_DIR, fileName)
           if (fs.existsSync(filePath)) {
             archive.file(filePath, { name: fileName })

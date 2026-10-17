@@ -152,6 +152,15 @@ file-converter/
 4. Choose optimization options
 5. Process and download compressed PDFs
 
+### Edit PDF
+1. Upload one PDF file up to 50 MB
+2. Choose **Edit PDF** and open the editor
+3. Add text, PNG/JPEG images, shapes, arrows, drawings, and highlights
+4. Use the page controls, zoom, selection handles, undo, redo, delete, and layer controls
+5. Export and download a new PDF; the original file is never overwritten
+
+The editor stores added elements in PDF page coordinates and preserves the original page content as vectors. It does not directly replace arbitrary text already present in a PDF. Scanned text is viewable and annotatable but requires a future OCR workflow before it can be edited. Password-protected PDFs can be opened with their password; the edited export is currently an unlocked copy.
+
 ## 🔧 Configuration
 
 ### Image Processing Options

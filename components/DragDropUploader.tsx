@@ -103,6 +103,8 @@ function SortableItem({ id, image, onRemove, options }: SortableItemProps) {
 
 export default function DragDropUploader({ images, onImagesChange, options }: DragDropUploaderProps) {
   const [estimatedSizes, setEstimatedSizes] = useState<{ [key: string]: number }>({})
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const isPdfOperation = options.operation.startsWith('pdf-')
   
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -187,6 +189,7 @@ export default function DragDropUploader({ images, onImagesChange, options }: Dr
   }, [images, options, calculateEstimatedSize, onImagesChange])
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
+    setUploadError(null)
     const newImages: ImageFile[] = acceptedFiles.map((file, index) => {
       const isPdf = file.type === 'application/pdf'
       return {
@@ -205,11 +208,16 @@ export default function DragDropUploader({ images, onImagesChange, options }: Dr
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    onDropRejected: (rejections) => {
+      const tooLarge = rejections.some(rejection => rejection.errors.some(error => error.code === 'file-too-large'))
+      setUploadError(tooLarge ? 'Files must be 50 MB or smaller.' : 'Choose a supported image or PDF file.')
+    },
     accept: {
       'image/*': ['.jpeg', '.jpg', '.png', '.webp', '.gif', '.bmp'],
       'application/pdf': ['.pdf']
     },
-    multiple: true
+    multiple: true,
+    maxSize: 50 * 1024 * 1024,
   })
 
   const removeImage = useCallback((id: string) => {
@@ -242,12 +250,12 @@ export default function DragDropUploader({ images, onImagesChange, options }: Dr
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              {options.operation === 'pdf-compress' ? <PdfIcon className="w-6 h-6 text-red-500"/> : <ImageIcon className="w-6 h-6 text-primary-500"/>}
-              {options.operation === 'pdf-compress' ? 'Upload PDFs' : 'Upload Images'}
+              {isPdfOperation ? <PdfIcon className="w-6 h-6 text-red-500"/> : <ImageIcon className="w-6 h-6 text-primary-500"/>}
+              {isPdfOperation ? 'Upload PDFs' : 'Upload Images'}
             </h2>
             <p className="text-sm text-gray-500 mt-1">
-              {options.operation === 'pdf-compress' 
-                ? 'Compress and optimize your PDF documents'
+              {isPdfOperation
+                ? options.operation === 'pdf-edit' ? 'Choose one PDF to edit' : 'Process your PDF documents'
                 : 'Process your images locally and securely'
               }
             </p>
@@ -262,6 +270,12 @@ export default function DragDropUploader({ images, onImagesChange, options }: Dr
             </button>
           )}
         </div>
+
+        {uploadError && (
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+            {uploadError}
+          </div>
+        )}
 
         <div
           {...getRootProps()}
