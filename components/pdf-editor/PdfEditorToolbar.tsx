@@ -32,9 +32,16 @@ interface Props {
   selectedElement: PdfEditorElement | null
   onElementChange: (element: PdfEditorElement) => void
   onAdvanced: () => void
+  advancedOpen: boolean
+  quickFillOpen: boolean
+  onQuickFillToggle: () => void
+  drawColor: string
+  drawWidth: number
+  highlightColor: string
+  onDefaultsChange: (values: { drawColor?: string; drawWidth?: number; highlightColor?: string }) => void
 }
 
-export default function PdfEditorToolbar({ tool, onToolChange, onImageRequest, onReplaceImage, zoom, onZoomChange, onUndo, onRedo, canUndo, canRedo, onDelete, onDuplicate, onReorder, selectedElement, onElementChange, onAdvanced }: Props) {
+export default function PdfEditorToolbar({ tool, onToolChange, onImageRequest, onReplaceImage, zoom, onZoomChange, onUndo, onRedo, canUndo, canRedo, onDelete, onDuplicate, onReorder, selectedElement, onElementChange, onAdvanced, advancedOpen, quickFillOpen, onQuickFillToggle, drawColor, drawWidth, highlightColor, onDefaultsChange }: Props) {
   const update = (changes: Partial<PdfEditorElement>) => {
     if (selectedElement) onElementChange({ ...selectedElement, ...changes } as PdfEditorElement)
   }
@@ -47,6 +54,8 @@ export default function PdfEditorToolbar({ tool, onToolChange, onImageRequest, o
         ))}
       </div>
       <div className="pdf-editor-context" aria-label="Selected object formatting">
+        {tool === 'draw' && <><label className="pdf-toolbar-color">Draw color <input aria-label="Drawing color" type="color" value={drawColor} onChange={event => onDefaultsChange({ drawColor: event.target.value })} /></label><label className="pdf-toolbar-color">Width <input aria-label="Drawing width" className="w-14" type="number" min="1" max="20" value={drawWidth} onChange={event => onDefaultsChange({ drawWidth: Number(event.target.value) })} /></label></>}
+        {tool === 'highlight' && <label className="pdf-toolbar-color">Highlight color <input aria-label="Highlight color" type="color" value={highlightColor} onChange={event => onDefaultsChange({ highlightColor: event.target.value })} /></label>}
         {selectedElement?.type === 'text' && <>
           <select aria-label="Font family" value={selectedElement.fontFamily} onChange={event => update({ fontFamily: event.target.value as PdfFontFamily })}><option value="Helvetica">Helvetica</option><option value="TimesRoman">Times</option><option value="Courier">Courier</option><option value="NotoSans">Noto Sans</option></select>
           <input aria-label="Font size" className="w-16" type="number" min="4" max="500" value={selectedElement.fontSize} onChange={event => update({ fontSize: Number(event.target.value) })} />
@@ -64,10 +73,11 @@ export default function PdfEditorToolbar({ tool, onToolChange, onImageRequest, o
           <button className="pdf-icon-button" onClick={() => onReorder('backward')} title="Send backward" aria-label="Send backward"><MoveDown /></button>
           <button className="pdf-icon-button" onClick={() => onReorder('forward')} title="Bring forward" aria-label="Bring forward"><MoveUp /></button>
           <button className="pdf-icon-button text-red-600" onClick={onDelete} title="Delete selected" aria-label="Delete selected"><Trash2 /></button>
-          <button className="pdf-style-toggle" onClick={onAdvanced}>Properties</button>
         </>}
+        <button className={`pdf-style-toggle ${advancedOpen ? 'active' : ''}`} aria-expanded={advancedOpen} aria-controls="pdf-advanced-options" onClick={onAdvanced}>More options</button>
       </div>
       <div className="pdf-editor-commandbar">
+        <button className={`pdf-style-toggle ${quickFillOpen ? 'active' : ''}`} aria-expanded={quickFillOpen} aria-controls="pdf-quick-fill" onClick={onQuickFillToggle}>Quick Fill</button>
         <button className="pdf-icon-button" onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl+Z)" aria-label="Undo"><Undo2 /></button>
         <button className="pdf-icon-button" onClick={onRedo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><Redo2 /></button>
         <button className="pdf-icon-button" onClick={() => onZoomChange(Math.max(0.5, zoom - 0.1))} title="Zoom out" aria-label="Zoom out"><ZoomOut /></button>

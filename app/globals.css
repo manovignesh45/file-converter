@@ -56,21 +56,12 @@
   @apply relative flex min-h-0 flex-1 overflow-hidden;
 }
 
-.pdf-editor-modes {
-  @apply flex min-h-11 items-center gap-2 border-b border-gray-200 px-4;
-}
-
-.pdf-editor-modes button {
-  @apply h-10 border-b-2 border-transparent px-3 text-sm font-semibold text-gray-500 hover:text-gray-900;
-}
-
-.pdf-editor-modes button.active {
-  @apply border-primary-600 text-primary-700;
-}
-
 .pdf-editor-toolbar {
   @apply flex min-h-14 flex-wrap items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-1;
 }
+.pdf-editor-toolbar-wrap { @apply relative z-40 flex-none; }
+.pdf-editor-advanced { @apply absolute right-3 top-full z-50 mt-2 max-h-[min(70vh,36rem)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-gray-200 bg-white p-4 text-sm shadow-xl; }
+.pdf-editor-advanced .pdf-property-field { @apply text-sm; }
 
 .pdf-editor-tools, .pdf-editor-context {
   @apply flex min-w-0 flex-wrap items-center gap-1;
@@ -130,19 +121,35 @@
 
 .pdf-thumbnail.active { @apply border-primary-500 bg-white text-primary-700; }
 .pdf-thumbnail canvas { @apply max-w-full bg-white shadow-sm; }
-.pdf-sidebar-toggle, .pdf-inspector-toggle {
+.pdf-sidebar-toggle {
   @apply absolute top-2 z-40 flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500;
 }
 .pdf-sidebar-toggle { @apply left-2; }
-.pdf-inspector-toggle { @apply right-2; }
-.pdf-sidebar-toggle svg, .pdf-inspector-toggle svg { @apply h-5 w-5; }
+.pdf-sidebar-toggle svg { @apply h-5 w-5; }
 .pdf-editor-status { @apply flex min-h-9 items-center justify-between border-t border-gray-200 bg-white px-4 text-xs text-gray-600; }
 .pdf-fill-panel { @apply w-72 flex-none overflow-y-auto border-l border-gray-200 bg-white p-5 text-sm leading-6 text-gray-600; }
 .pdf-fill-panel h2 { @apply mb-3 text-lg font-bold text-gray-900; }
 .pdf-fill-panel input:not([type='checkbox']), .pdf-fill-panel textarea, .pdf-fill-panel select { @apply w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none; }
-.pdf-field-card { @apply rounded-xl border border-gray-200 bg-gray-50 p-3; }
+.pdf-field-card { @apply cursor-grab select-none rounded-xl border border-gray-200 bg-gray-50 p-3; touch-action: none; }
+.pdf-field-card:active { cursor: grabbing; }
+.pdf-field-card:focus-visible { @apply outline outline-2 outline-offset-2 outline-primary-500; }
+.pdf-field-card input, .pdf-field-card textarea, .pdf-field-card select, .pdf-field-card button { cursor: auto; user-select: text; touch-action: auto; }
+.pdf-field-drag-preview { position: fixed; top: 0; left: 0; z-index: 9999; max-width: 240px; border: 1px solid #a5b4fc; border-radius: 8px; background: white; padding: 6px 10px; color: #0f172a; font: 16px sans-serif; white-space: pre-wrap; box-shadow: 0 4px 12px #0f172a33; pointer-events: none; display: flex; align-items: center; will-change: transform; }
+.pdf-field-drag-preview img { display: block; max-width: 200px; max-height: 72px; }
+.pdf-field-drag-preview.is-on-page { max-width: none; overflow: visible; border: 2px solid #4f46e5; border-radius: 0; background: rgb(255 255 255 / 70%); padding: 0; box-shadow: none; line-height: 1.2; }
+.pdf-field-drag-preview.is-on-page > span:first-child { display: block; width: 100%; overflow: hidden; padding: 0 4px; }
+.pdf-field-drag-preview.is-on-page img { max-width: 100%; max-height: 100%; }
+.pdf-field-drag-preview .pdf-field-preview-handle { display: none; }
+.pdf-field-drag-preview.is-on-page .pdf-field-preview-handle { display: block; }
+.pdf-field-preview-handle { @apply absolute h-2.5 w-2.5 rounded-full bg-primary-600; }
+.pdf-field-preview-handle.top-left { top: -6px; left: -6px; }
+.pdf-field-preview-handle.top-right { top: -6px; right: -6px; }
+.pdf-field-preview-handle.bottom-left { bottom: -6px; left: -6px; }
+.pdf-field-preview-handle.bottom-right { bottom: -6px; right: -6px; }
+.pdf-inline-font-controls { @apply absolute z-30 flex h-8 items-center gap-1 rounded-lg border border-primary-300 bg-white px-1 text-xs font-semibold text-gray-800 shadow-md; }
+.pdf-inline-font-controls button { @apply flex h-6 w-6 items-center justify-center rounded text-base hover:bg-primary-50 disabled:opacity-40; }
+.pdf-inline-font-controls span { @apply min-w-5 text-center; }
 .pdf-field-card.active { @apply border-primary-500 bg-primary-50; }
-.pdf-fill-toolbar { @apply flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-1 text-sm text-gray-700; }
 .pdf-page-shell.is-placing .upper-canvas { cursor: crosshair !important; }
 .pdf-signature-backdrop { @apply fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4; }
 .pdf-signature-dialog { @apply max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl; }
@@ -185,14 +192,6 @@
   pointer-events: none !important;
 }
 
-.pdf-editor-inspector {
-  @apply w-80 flex-none overflow-y-auto border-l border-gray-200 bg-white p-5;
-}
-
-.pdf-editor-inspector h2 {
-  @apply text-lg font-bold;
-}
-
 .pdf-property-field {
   @apply block text-sm font-medium text-gray-700;
 }
@@ -225,7 +224,7 @@
 
 @media (max-width: 767px) {
   .pdf-thumbnail-sidebar { position: absolute; top: 0; left: 0; bottom: 0; z-index: 30; width: min(11rem, 70vw); box-shadow: 8px 0 20px rgba(15, 23, 42, 0.14); }
-  .pdf-editor-inspector, .pdf-fill-panel { position: absolute; top: 0; right: 0; bottom: 0; z-index: 30; width: min(20rem, 85vw); }
+  .pdf-fill-panel { position: absolute; top: 0; right: 0; bottom: 0; z-index: 30; width: min(20rem, 85vw); }
   .pdf-editor-commandbar { margin-left: auto; }
   .pdf-editor-toolbar { max-height: 9rem; overflow-y: auto; }
 }

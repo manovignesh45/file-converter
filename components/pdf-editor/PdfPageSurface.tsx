@@ -18,7 +18,7 @@ import {
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api'
 import type { PageViewport } from 'pdfjs-dist/types/src/display/display_utils'
 import { normalizeDegrees, pdfToViewport, viewportRotation, viewportScale, viewportToPdf } from '../../lib/pdf/coordinates'
-import { clientToPdfPoint, FIELD_DRAG_TYPE } from '../../lib/pdf/placement'
+import { clientToPdfPoint } from '../../lib/pdf/placement'
 import { browserTextLayout } from '../../lib/pdf/browserTextLayout'
 import type { PdfDrawingElement, PdfEditorElement, PdfEditorTool, PdfHighlightElement, PdfPoint, PdfTextElement } from '../../types/pdfEditor'
 
@@ -41,7 +41,13 @@ interface PdfPageSurfaceProps {
   onAddHighlights: (elements: PdfHighlightElement[]) => void
   onModify: (element: PdfEditorElement) => void
   placingField?: boolean
-  onDropField?: (fieldId: string, pageIndex: number, point: PdfPoint) => void
+}
+
+function viewportBox(point: PdfPoint, width: number, height: number, viewport: PageViewport) {
+  const corners = [point, { x: point.x + width, y: point.y }, { x: point.x, y: point.y + height }, { x: point.x + width, y: point.y + height }].map(corner => pdfToViewport(corner, viewport))
+  const left = Math.min(...corners.map(corner => corner.x))
+  const top = Math.min(...corners.map(corner => corner.y))
+  return { left, top, width: Math.max(...corners.map(corner => corner.x)) - left, height: Math.max(...corners.map(corner => corner.y)) - top }
 }
 
 function objectOptions(element: PdfEditorElement, viewport: PageViewport) {
@@ -92,7 +98,6 @@ export default function PdfPageSurface({
   onAddHighlights,
   onModify,
   placingField = false,
-  onDropField,
 }: PdfPageSurfaceProps) {
   const backgroundRef = useRef<HTMLCanvasElement>(null)
   const shellRef = useRef<HTMLElement>(null)
@@ -106,6 +111,9 @@ export default function PdfPageSurface({
   const temporaryDrawingRef = useRef<Polyline | null>(null)
   const highlightStartRef = useRef<{ x: number; y: number } | null>(null)
   const viewport = useMemo(() => page.getViewport({ scale: zoom }), [page, zoom])
+  const selectedText = elements.find((element): element is PdfTextElement => element.id === selectedId && element.type === 'text')
+  const selectedTextBox = selectedText ? viewportBox(selectedText, selectedText.width, selectedText.height, viewport) : null
+
 
   useEffect(() => {
     const shell = shellRef.current
@@ -420,13 +428,6 @@ export default function PdfPageSurface({
       data-page-index={pageIndex}
       style={{ width: viewport.width, height: viewport.height }}
       onPointerDown={() => onActivate(pageIndex)}
-      onDragOver={event => { if (event.dataTransfer.types.includes(FIELD_DRAG_TYPE)) event.preventDefault() }}
-      onDrop={event => {
-        const fieldId = event.dataTransfer.getData(FIELD_DRAG_TYPE)
-        if (!fieldId || !onDropField) return
-        event.preventDefault()
-        onDropField(fieldId, pageIndex, clientToPdfPoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect(), viewport))
-      }}
       aria-label={`PDF page ${pageIndex + 1}`}
     >
       <canvas ref={backgroundRef} className="absolute inset-0" />
@@ -437,6 +438,11 @@ export default function PdfPageSurface({
         onPointerUp={finishHighlight}
       />
       <canvas ref={overlayRef} />
+      {selectedText && selectedTextBox && <div className="pdf-inline-font-controls" style={{ left: Math.max(4, Math.min(selectedTextBox.left, viewport.width - 92)), top: selectedTextBox.top >= 44 ? selectedTextBox.top - 40 : Math.min(viewport.height - 36, selectedTextBox.top + selectedTextBox.height + 4) }} onPointerDown={event => event.stopPropagation()}>
+        <button type="button" aria-label="Decrease selected text size" disabled={selectedText.fontSize <= 4} onClick={() => onModify({ ...selectedText, fontSize: Math.max(4, selectedText.fontSize - 1) })}>−</button>
+        <span aria-label={`Font size ${selectedText.fontSize}`}>{selectedText.fontSize}</span>
+        <button type="button" aria-label="Increase selected text size" disabled={selectedText.fontSize >= 500} onClick={() => onModify({ ...selectedText, fontSize: Math.min(500, selectedText.fontSize + 1) })}>+</button>
+      </div>}
       <span className="pdf-page-number">{pageIndex + 1}</span>
     </section>
   )

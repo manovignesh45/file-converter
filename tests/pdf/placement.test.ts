@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clientToPdfPoint, createFieldPlacements } from '../../lib/pdf/placement'
+import { clientToPdfPoint, createFieldPlacements, fitFieldPlacementPoint } from '../../lib/pdf/placement'
 import { createDocumentPage } from '../../lib/pdf/document'
 import { commitHistory, createHistory, undoHistory, redoHistory } from '../../lib/pdf/history'
 
@@ -18,6 +18,17 @@ describe('field placement', () => {
     const small = createDocumentPage({ pageIndex: 1, width: 100, height: 100, rotation: 0 }, [0, 0, 100, 100])
     const result = createFieldPlacements({ id: 'name', kind: 'name', label: 'Name', value: 'Ada' }, first, [small], { x: 50, y: 60 }, () => 'item')
     expect(result.outOfBoundsPageIds).toEqual([small.id])
+  })
+
+  it('fits a dragged field within every destination page and preserves crop offsets', () => {
+    const first = createDocumentPage({ pageIndex: 0, width: 600, height: 800, rotation: 0 }, [0, 0, 600, 800])
+    const second = createDocumentPage({ pageIndex: 1, width: 300, height: 500, rotation: 0 }, [10, 20, 310, 520])
+    const field = { id: 'name', kind: 'name' as const, label: 'Name', value: 'Ada' }
+    const fitted = fitFieldPlacementPoint(field, first, [first, second], { x: 590, y: 790 })
+    expect(fitted).toEqual({ x: 120, y: 465 })
+    const result = createFieldPlacements(field, first, [first, second], fitted!, () => 'item')
+    expect(result.outOfBoundsPageIds).toEqual([])
+    expect(result.elements).toMatchObject([{ x: 120, y: 465 }, { x: 130, y: 485 }])
   })
 
   it('reverts multi-page insertion in one history step', () => {

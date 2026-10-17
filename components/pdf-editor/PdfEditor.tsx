@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api'
-import { ChevronLeft, ChevronRight, Download, FileText, LoaderCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, Undo2, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, FileText, LoaderCircle, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
 import PdfEditorToolbar from './PdfEditorToolbar'
 import PdfEditorInspector from './PdfEditorInspector'
 import PdfPageSurface from './PdfPageSurface'
@@ -14,7 +14,9 @@ import { cloneElementToPage, createDocumentPage, createEditorDocument, moveEleme
 import { hasSupportedImageSignature, MAX_IMAGE_BYTES } from '../../lib/pdf/validation'
 import { applyPlacedElementEdit, createDefaultFields, fieldDisplayValue, isTextualField, updateLinkedFieldText } from '../../lib/pdf/fields'
 import { localTodayDateOnly } from '../../lib/pdf/dateFormatting'
-import { createFieldPlacements } from '../../lib/pdf/placement'
+import { createFieldPlacements, fitFieldPlacementPoint } from '../../lib/pdf/placement'
+import { clientToPdfPoint, fieldPlacementSize } from '../../lib/pdf/placement'
+import { pdfToViewport } from '../../lib/pdf/coordinates'
 import type { PdfFieldDefinition } from '../../types/pdfFields'
 import { deleteLocalSignature, listLocalSignatures, saveLocalSignature } from '../../lib/pdf/signatureRepository'
 import type { SignatureRecord } from '../../lib/pdf/signatures'
@@ -55,9 +57,9 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
   const [drawColor, setDrawColor] = useState('#1e293b')
   const [drawWidth, setDrawWidth] = useState(3)
   const [highlightColor, setHighlightColor] = useState('#fde047')
-  const [mode, setMode] = useState<'edit' | 'fill'>('edit')
   const [showThumbnails, setShowThumbnails] = useState(true)
-  const [showInspector, setShowInspector] = useState(false)
+  const [showQuickFill, setShowQuickFill] = useState(true)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [placementFieldId, setPlacementFieldId] = useState<string | null>(null)
   const [placementScope, setPlacementScope] = useState<'current' | 'selected' | 'all'>('current')
   const [selectedPages, setSelectedPages] = useState<number[]>([])
@@ -189,23 +191,50 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
   const addDrawing = useCallback((element: PdfDrawingElement) => addElements([element]), [addElements])
   const addHighlights = useCallback((items: PdfHighlightElement[]) => addElements(items), [addElements])
 
+  const fieldTargets = useCallback((sourcePage: PdfDocumentPage) => placementScope === 'all'
+    ? pageInfo
+    : placementScope === 'selected'
+      ? pageInfo.filter(page => selectedPages.includes(page.sourcePageIndex))
+      : [sourcePage], [pageInfo, placementScope, selectedPages])
+
+  const locateDraggedField = useCallback((fieldId: string, clientX: number, clientY: number) => {
+    const shell = globalThis.document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('.pdf-page-shell')
+    const pageIndex = Number(shell?.dataset.pageIndex)
+    if (!shell || !Number.isInteger(pageIndex)) return null
+    const field = document.fields.find(item => item.id === fieldId)
+    const sourcePage = pageInfo[pageIndex]
+    const pdfPage = pages[pageIndex]
+    if (!field || !sourcePage || !pdfPage) return null
+    const viewport = pdfPage.getViewport({ scale: zoom })
+    const rect = shell.getBoundingClientRect()
+    const point = fitFieldPlacementPoint(field, sourcePage, fieldTargets(sourcePage), clientToPdfPoint(clientX, clientY, rect, viewport))
+    if (!point) return null
+    const size = fieldPlacementSize(field)
+    const corners = [point, { x: point.x + size.width, y: point.y }, { x: point.x, y: point.y + size.height }, { x: point.x + size.width, y: point.y + size.height }].map(corner => pdfToViewport(corner, viewport))
+    const minX = Math.min(...corners.map(corner => corner.x))
+    const minY = Math.min(...corners.map(corner => corner.y))
+    return { pageIndex, point, left: rect.left + minX * rect.width / viewport.width, top: rect.top + minY * rect.height / viewport.height, width: (Math.max(...corners.map(corner => corner.x)) - minX) * rect.width / viewport.width, height: (Math.max(...corners.map(corner => corner.y)) - minY) * rect.height / viewport.height, fontSize: 16 * zoom }
+  }, [document.fields, fieldTargets, pageInfo, pages, zoom])
+
   const placeField = useCallback((fieldId: string, pageIndex: number, point: PdfPoint) => {
     const field = document.fields.find(item => item.id === fieldId)
     const sourcePage = pageInfo[pageIndex]
     if (!field || !sourcePage) return
     if (isTextualField(field) && !fieldDisplayValue(field).trim()) { setError(`Enter ${field.label.toLowerCase()} before placing it.`); return }
     if (field.kind === 'signature' && !assets[field.assetId]) { setError('This signature image is unavailable. Recreate it before placing.'); return }
-    const targets = placementScope === 'all' ? pageInfo : placementScope === 'selected' ? pageInfo.filter(page => selectedPages.includes(page.sourcePageIndex)) : [sourcePage]
+    const targets = fieldTargets(sourcePage)
     if (!targets.length) { setError('Select at least one target page.'); return }
-    const result = createFieldPlacements(field, sourcePage, targets, point, () => crypto.randomUUID())
+    const fittedPoint = fitFieldPlacementPoint(field, sourcePage, targets, point)
+    if (!fittedPoint) { setError('This field is too large to fit on a selected page. Resize it after placing on a larger page.'); return }
+    const result = createFieldPlacements(field, sourcePage, targets, fittedPoint, () => crypto.randomUUID())
     if (result.outOfBoundsPageIds.length) {
       setError(`The field would extend beyond ${result.outOfBoundsPageIds.length} page(s). Choose a position with more space.`)
       return
     }
     setError(null)
     addElements(result.elements)
-    setPlacementFieldId(fieldId)
-  }, [addElements, assets, document.fields, pageInfo, placementScope, selectedPages])
+    setPlacementFieldId(null)
+  }, [addElements, assets, document.fields, fieldTargets, pageInfo])
 
   const changeField = useCallback((updated: PdfFieldDefinition) => {
     setHistory(current => commitHistory(current, {
@@ -224,6 +253,8 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     setSignatureRecords(current => ({ ...current, [record.id]: record }))
     if (saveLocally) setSavedSignatureIds(current => [...current, record.id])
     setHistory(current => commitHistory(current, { ...current.present, fields: [...current.present.fields, { id: record.id, kind: 'signature', label: record.name, assetId: record.id, mimeType: record.mimeType }] }))
+    setTool('select')
+    setShowQuickFill(true)
     setPlacementFieldId(record.id)
   }
 
@@ -248,14 +279,14 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
   }
 
   const addAt = useCallback((pageIndex: number, point: PdfPoint) => {
-    if (mode === 'fill' && placementFieldId) { placeField(placementFieldId, pageIndex, point); return }
+    if (placementFieldId) { placeField(placementFieldId, pageIndex, point); return }
     const common = { id: crypto.randomUUID(), pageIndex, zIndex: 0, x: point.x, y: point.y, rotation: 0, opacity: 1 }
     let element: PdfEditorElement | null = null
     if (tool === 'text') element = { ...common, type: 'text', width: 180, height: 60, text: 'New text', fontFamily: 'Helvetica', fontSize: 18, color: '#0f172a', bold: false, italic: false, underline: false }
     if (tool === 'rectangle' || tool === 'ellipse') element = { ...common, type: tool, width: 120, height: 80, strokeColor: '#4f46e5', fillColor: null, strokeWidth: 2 }
     if (tool === 'line' || tool === 'arrow') element = { ...common, type: tool, width: 120, height: 1, strokeColor: '#4f46e5', strokeWidth: 3 }
     if (element) addElements([element])
-  }, [addElements, mode, placementFieldId, placeField, tool])
+  }, [addElements, placementFieldId, placeField, tool])
 
   const modifyElement = useCallback((updated: PdfEditorElement) => {
     setHistory(current => commitHistory(current, { ...current.present, elements: current.present.elements.map(element => {
@@ -316,6 +347,7 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
         setTool('select')
         setSelectedId(null)
         setPlacementFieldId(null)
+        setShowAdvanced(false)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -434,24 +466,22 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
         </button>
       </header>
 
-      <nav className="pdf-editor-modes" aria-label="Editor mode">
-        <button className={mode === 'edit' ? 'active' : ''} aria-current={mode === 'edit' ? 'page' : undefined} onClick={() => setMode('edit')}>Edit PDF</button>
-        <button className={mode === 'fill' ? 'active' : ''} aria-current={mode === 'fill' ? 'page' : undefined} onClick={() => { setMode('fill'); setTool('select') }}>Fill &amp; Sign</button>
-        <span className="ml-auto text-xs text-gray-500">Original PDF text is read-only</span>
-      </nav>
-
       {error && <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>}
 
-      {mode === 'edit' && <PdfEditorToolbar
-        tool={tool} onToolChange={setTool} onImageRequest={() => imageInputRef.current?.click()} onReplaceImage={() => replaceImageInputRef.current?.click()}
+      <div className="pdf-editor-toolbar-wrap"><PdfEditorToolbar
+        tool={tool} onToolChange={next => { setTool(next); setPlacementFieldId(null) }} onImageRequest={() => imageInputRef.current?.click()} onReplaceImage={() => replaceImageInputRef.current?.click()}
         zoom={zoom} onZoomChange={setZoom}
         onUndo={() => { setHistory(current => undoHistory(current)); setSelectedId(null) }}
         onRedo={() => { setHistory(current => redoHistory(current)); setSelectedId(null) }}
         canUndo={history.past.length > 0} canRedo={history.future.length > 0}
         onDelete={deleteSelected} onDuplicate={duplicateSelected} onReorder={reorderSelected}
-        selectedElement={selectedElement} onElementChange={modifyElement} onAdvanced={() => setShowInspector(true)}
-      />}
-      {mode === 'fill' && <div className="pdf-fill-toolbar"><span>{placementFieldId ? `Click a page to place ${document.fields.find(field => field.id === placementFieldId)?.label || 'field'}. Escape cancels.` : 'Choose a field to place'}</span><div className="flex items-center gap-1"><button className="pdf-icon-button" title="Undo" aria-label="Undo" disabled={!history.past.length} onClick={() => { setHistory(current => undoHistory(current)); setSelectedId(null) }}><Undo2 /></button><button className="pdf-icon-button" title="Redo" aria-label="Redo" disabled={!history.future.length} onClick={() => { setHistory(current => redoHistory(current)); setSelectedId(null) }}><Redo2 /></button><button className="pdf-icon-button" title="Zoom out" aria-label="Zoom out" onClick={() => setZoom(value => Math.max(0.5, value - 0.1))}><ZoomOut /></button><span className="text-sm">{Math.round(zoom * 100)}%</span><button className="pdf-icon-button" title="Zoom in" aria-label="Zoom in" onClick={() => setZoom(value => Math.min(2.5, value + 0.1))}><ZoomIn /></button>{placementFieldId && <button className="pdf-style-toggle" onClick={() => setPlacementFieldId(null)}>Cancel placement</button>}</div></div>}
+        selectedElement={selectedElement} onElementChange={modifyElement} onAdvanced={() => setShowAdvanced(value => !value)} advancedOpen={showAdvanced}
+        quickFillOpen={showQuickFill} onQuickFillToggle={() => { setShowQuickFill(value => !value); setPlacementFieldId(null) }}
+        drawColor={drawColor} drawWidth={drawWidth} highlightColor={highlightColor}
+        onDefaultsChange={values => { if (values.drawColor) setDrawColor(values.drawColor); if (values.drawWidth !== undefined) setDrawWidth(values.drawWidth); if (values.highlightColor) setHighlightColor(values.highlightColor) }}
+      />
+      {showAdvanced && <PdfEditorInspector element={selectedElement} onChange={modifyElement} onClose={() => setShowAdvanced(false)} />}
+      </div>
 
       <input ref={imageInputRef} className="hidden" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={event => { void chooseImage(event.target.files?.[0]); event.target.value = '' }} />
       <input ref={replaceImageInputRef} className="hidden" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={event => { void chooseImage(event.target.files?.[0], true); event.target.value = '' }} />
@@ -470,18 +500,11 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
               onAddDrawing={addDrawing}
               onAddHighlights={addHighlights}
               onModify={modifyElement}
-              placingField={mode === 'fill' && Boolean(placementFieldId)}
-              onDropField={placeField}
+              placingField={Boolean(placementFieldId)}
             />
           ))}
         </div>
-        {mode === 'fill' && !showInspector && <QuickFillPanel fields={document.fields} activeFieldId={placementFieldId} onSelectField={id => setPlacementFieldId(current => current === id ? null : id)} onChangeField={changeField} onToday={id => { const field = document.fields.find(item => item.id === id); if (field?.kind === 'date') changeField({ ...field, date: localTodayDateOnly(), manualText: undefined }) }} scope={placementScope} onScopeChange={setPlacementScope} selectedPages={selectedPages} onTogglePage={index => setSelectedPages(current => current.includes(index) ? current.filter(item => item !== index) : [...current, index])} pageCount={pages.length} onCreateSignature={() => setSignatureDialogOpen(true)} onDeleteSignature={id => { void removeSignature(id) }} onRenameSignature={(id, name) => { void renameSignature(id, name) }} signatureUrls={assetUrls} savedSignatureIds={savedSignatureIds} />}
-        {showInspector && <PdfEditorInspector
-          element={selectedElement} onChange={modifyElement}
-          drawColor={drawColor} drawWidth={drawWidth} highlightColor={highlightColor}
-          onDefaultsChange={values => { if (values.drawColor) setDrawColor(values.drawColor); if (values.drawWidth) setDrawWidth(values.drawWidth); if (values.highlightColor) setHighlightColor(values.highlightColor) }}
-        />}
-        <button className="pdf-inspector-toggle" onClick={() => setShowInspector(value => !value)} aria-label={showInspector ? 'Hide properties' : mode === 'fill' ? 'Show selected properties' : 'Show properties'} title={showInspector ? 'Hide properties' : 'Show properties'}>{showInspector ? <PanelRightClose /> : <PanelRightOpen />}</button>
+        {showQuickFill && <QuickFillPanel fields={document.fields} activeFieldId={placementFieldId} onSelectField={id => { setTool('select'); setPlacementFieldId(current => current === id ? null : id) }} onDragFieldStart={() => { setTool('select'); setPlacementFieldId(null) }} onLocateField={locateDraggedField} onDropField={placeField} onChangeField={changeField} onToday={id => { const field = document.fields.find(item => item.id === id); if (field?.kind === 'date') changeField({ ...field, date: localTodayDateOnly(), manualText: undefined }) }} scope={placementScope} onScopeChange={setPlacementScope} selectedPages={selectedPages} onTogglePage={index => setSelectedPages(current => current.includes(index) ? current.filter(item => item !== index) : [...current, index])} pageCount={pages.length} onCreateSignature={() => setSignatureDialogOpen(true)} onDeleteSignature={id => { void removeSignature(id) }} onRenameSignature={(id, name) => { void renameSignature(id, name) }} signatureUrls={assetUrls} savedSignatureIds={savedSignatureIds} />}
       </div>
       <footer className="pdf-editor-status"><span>Page {activePage + 1} of {pages.length}</span><span>Zoom {Math.round(zoom * 100)}%</span><span>{selectedTextOverflow ? 'Selected text exceeds its box' : 'Unsaved session'}</span></footer>
       {signatureDialogOpen && <SignatureDialog onClose={() => setSignatureDialogOpen(false)} onSave={addSignature} />}

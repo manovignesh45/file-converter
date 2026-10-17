@@ -1,13 +1,20 @@
 'use client'
 
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import type { PdfFieldDefinition } from '../../types/pdfFields'
 import type { PdfDateFormat } from '../../lib/pdf/dateFormatting'
-import { FIELD_DRAG_TYPE } from '../../lib/pdf/placement'
+import { fieldDisplayValue, isTextualField } from '../../lib/pdf/fields'
+import type { PdfPoint } from '../../types/pdfEditor'
+
+interface DragLocation { pageIndex: number; point: PdfPoint; left: number; top: number; width: number; height: number; fontSize: number }
 
 interface Props {
   fields: PdfFieldDefinition[]
   activeFieldId: string | null
   onSelectField: (id: string) => void
+  onDragFieldStart: () => void
+  onLocateField: (id: string, clientX: number, clientY: number) => DragLocation | null
+  onDropField: (id: string, pageIndex: number, point: PdfPoint) => void
   onChangeField: (field: PdfFieldDefinition) => void
   onToday: (id: string) => void
   scope: 'current' | 'selected' | 'all'
@@ -22,13 +29,86 @@ interface Props {
   savedSignatureIds: string[]
 }
 
-export default function QuickFillPanel({ fields, activeFieldId, onSelectField, onChangeField, onToday, scope, onScopeChange, selectedPages, onTogglePage, pageCount, onCreateSignature, onDeleteSignature, onRenameSignature, signatureUrls, savedSignatureIds }: Props) {
-  return <aside className="pdf-fill-panel" aria-label="Quick Fill">
+export default function QuickFillPanel({ fields, activeFieldId, onSelectField, onDragFieldStart, onLocateField, onDropField, onChangeField, onToday, scope, onScopeChange, selectedPages, onTogglePage, pageCount, onCreateSignature, onDeleteSignature, onRenameSignature, signatureUrls, savedSignatureIds }: Props) {
+  const dragPreviewRef = useRef<HTMLDivElement | null>(null)
+  const dragGestureRef = useRef<{ field: PdfFieldDefinition; pointerId: number; startX: number; startY: number; started: boolean } | null>(null)
+  const suppressClickRef = useRef(false)
+  const clearDragPreview = () => {
+    dragPreviewRef.current?.remove()
+    dragPreviewRef.current = null
+    dragGestureRef.current = null
+  }
+  useEffect(() => () => {
+    dragPreviewRef.current?.remove()
+  }, [])
+
+  const startPointer = (event: ReactPointerEvent<HTMLDivElement>, field: PdfFieldDefinition) => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest('input, textarea, select, button')) return
+    dragGestureRef.current = { field, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, started: false }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const movePointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = dragGestureRef.current
+    if (!gesture || gesture.pointerId !== event.pointerId) return
+    if (!gesture.started && Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) < 5) return
+    if (!gesture.started) {
+      gesture.started = true
+      onDragFieldStart()
+      const preview = document.createElement('div')
+      preview.className = 'pdf-field-drag-preview'
+      if (gesture.field.kind === 'signature' && signatureUrls[gesture.field.assetId]) {
+        const image = document.createElement('img')
+        image.src = signatureUrls[gesture.field.assetId]
+        image.alt = gesture.field.label
+        preview.appendChild(image)
+      } else {
+        const value = document.createElement('span')
+        value.textContent = gesture.field.kind === 'checkmark' ? '✓' : gesture.field.kind === 'crossmark' ? '✕' : isTextualField(gesture.field) ? fieldDisplayValue(gesture.field) || gesture.field.label : gesture.field.label
+        preview.appendChild(value)
+      }
+      for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right']) {
+        const handle = document.createElement('i')
+        handle.className = `pdf-field-preview-handle ${corner}`
+        preview.appendChild(handle)
+      }
+      document.body.appendChild(preview)
+      dragPreviewRef.current = preview
+    }
+    event.preventDefault()
+    const preview = dragPreviewRef.current
+    if (!preview) return
+    const location = onLocateField(gesture.field.id, event.clientX, event.clientY)
+    preview.classList.toggle('is-on-page', Boolean(location))
+    preview.style.transform = `translate3d(${location ? location.left : event.clientX + 12}px, ${location ? location.top : event.clientY + 12}px, 0)`
+    preview.style.width = location ? `${location.width}px` : ''
+    preview.style.height = location ? `${location.height}px` : ''
+    preview.style.fontSize = location ? `${location.fontSize}px` : ''
+  }
+
+  const endPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = dragGestureRef.current
+    if (!gesture || gesture.pointerId !== event.pointerId) return
+    if (gesture.started) {
+      event.preventDefault()
+      const location = onLocateField(gesture.field.id, event.clientX, event.clientY)
+      if (location) onDropField(gesture.field.id, location.pageIndex, location.point)
+      suppressClickRef.current = true
+      window.setTimeout(() => { suppressClickRef.current = false }, 0)
+    }
+    clearDragPreview()
+  }
+
+  return <aside id="pdf-quick-fill" className="pdf-fill-panel" aria-label="Quick Fill">
     <h2>Quick Fill</h2>
-    <p className="mb-4">Enter a value once, then click Place or drag its row onto a page. Placed text stays linked until you edit that instance.</p>
+    {activeFieldId && <p className="mb-3 rounded-lg bg-primary-50 px-3 py-2 text-xs text-primary-800" role="status">Click a page to place {fields.find(field => field.id === activeFieldId)?.label || 'this item'}. Press Escape to cancel.</p>}
+    <p className="mb-4">Click a card, then click a page, or drag it onto a page. The placed item stays selected for resizing and moving. Use the controls above selected text to change its size.</p>
     <div className="space-y-3">
-      {fields.map(field => <div key={field.id} className={`pdf-field-card ${activeFieldId === field.id ? 'active' : ''}`}>
-        <div className="flex items-center justify-between gap-2">{field.kind === 'signature' ? <input className="min-w-0 flex-1 text-sm font-semibold" aria-label="Signature name" defaultValue={field.label} onBlur={event => { if (event.target.value.trim() && event.target.value.trim() !== field.label) onRenameSignature(field.id, event.target.value.trim()) }} /> : <strong className="text-sm text-gray-800">{field.label}</strong>}<button className="pdf-style-toggle" onClick={() => onSelectField(field.id)} aria-pressed={activeFieldId === field.id}>Place</button><button className="pdf-style-toggle cursor-grab" draggable onDragStart={event => { event.dataTransfer.setData(FIELD_DRAG_TYPE, field.id); event.dataTransfer.effectAllowed = 'copy' }} title={`Drag ${field.label} onto a page`}>Drag</button></div>
+      {fields.map(field => <div key={field.id} className={`pdf-field-card ${activeFieldId === field.id ? 'active' : ''}`} role="button" tabIndex={0} aria-label={`Place ${field.label}`} aria-pressed={activeFieldId === field.id}
+        onClick={event => { if (suppressClickRef.current) { event.preventDefault(); return }; if (!(event.target as HTMLElement).closest('input, textarea, select, button')) onSelectField(field.id) }}
+        onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onSelectField(field.id) } }}
+        onPointerDown={event => startPointer(event, field)} onPointerMove={movePointer} onPointerUp={endPointer} onPointerCancel={clearDragPreview}>
+        <div className="flex items-center justify-between gap-2">{field.kind === 'signature' ? <input className="min-w-0 flex-1 text-sm font-semibold" aria-label="Signature name" defaultValue={field.label} onBlur={event => { if (event.target.value.trim() && event.target.value.trim() !== field.label) onRenameSignature(field.id, event.target.value.trim()) }} /> : <strong className="text-sm text-gray-800">{field.label}</strong>}</div>
         {field.kind === 'date' ? <div className="mt-2 space-y-2">
           <input aria-label="Date" type="date" value={field.date} onChange={event => onChangeField({ ...field, date: event.target.value })} />
           <select aria-label="Date format" value={field.format} onChange={event => onChangeField({ ...field, format: event.target.value as PdfDateFormat })}><option>DD/MM/YYYY</option><option>DD-MM-YYYY</option><option>YYYY-MM-DD</option><option>DD MMM YYYY</option></select>

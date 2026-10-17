@@ -4,7 +4,25 @@ import { fieldDisplayValue, isTextualField } from './fields'
 import { viewportToPdf, type PdfViewportLike } from './coordinates'
 
 export interface PlacementResult { elements: PdfEditorElement[]; outOfBoundsPageIds: string[] }
-export const FIELD_DRAG_TYPE = 'application/x-convertpro-field'
+
+export function fieldPlacementSize(field: PdfFieldDefinition): { width: number; height: number } {
+  if (field.kind === 'signature') return { width: 180, height: 65 }
+  if (field.kind === 'checkmark' || field.kind === 'crossmark') return { width: 22, height: 22 }
+  return { width: field.kind === 'initials' ? 80 : 180, height: field.kind === 'address' ? 80 : 35 }
+}
+
+/** Keeps a dragged field inside every destination page while preserving its shared offset. */
+export function fitFieldPlacementPoint(field: PdfFieldDefinition, sourcePage: PdfDocumentPage, targetPages: PdfDocumentPage[], point: PdfPoint): PdfPoint | null {
+  if (!targetPages.length) return null
+  const size = fieldPlacementSize(field)
+  const maxX = Math.min(...targetPages.map(page => page.bounds[2] - page.bounds[0] - size.width))
+  const maxY = Math.min(...targetPages.map(page => page.bounds[3] - page.bounds[1] - size.height))
+  if (maxX < 0 || maxY < 0) return null
+  return {
+    x: sourcePage.bounds[0] + Math.max(0, Math.min(point.x - sourcePage.bounds[0], maxX)),
+    y: sourcePage.bounds[1] + Math.max(0, Math.min(point.y - sourcePage.bounds[1], maxY)),
+  }
+}
 
 export function clientToPdfPoint(clientX: number, clientY: number, rect: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>, viewport: PdfViewportLike & { width: number; height: number }): PdfPoint {
   return viewportToPdf({
@@ -15,12 +33,12 @@ export function clientToPdfPoint(clientX: number, clientY: number, rect: Pick<DO
 
 function placedAt(field: PdfFieldDefinition, page: PdfDocumentPage, point: PdfPoint, id: () => string): PdfEditorElement[] {
   const base = { pageId: page.id, pageIndex: page.sourcePageIndex, zIndex: 0, x: point.x, y: point.y, rotation: 0, opacity: 1 }
-  if (field.kind === 'signature') return [{ ...base, id: id(), type: 'image', width: 180, height: 65, assetId: field.assetId, mimeType: field.mimeType, signatureId: field.id }]
-  if (field.kind === 'checkmark' || field.kind === 'crossmark') return [{ ...base, id: id(), type: field.kind, width: 22, height: 22, strokeColor: '#0f172a', strokeWidth: 2.5, fieldId: field.id }]
+  const size = fieldPlacementSize(field)
+  if (field.kind === 'signature') return [{ ...base, id: id(), type: 'image', ...size, assetId: field.assetId, mimeType: field.mimeType, signatureId: field.id }]
+  if (field.kind === 'checkmark' || field.kind === 'crossmark') return [{ ...base, id: id(), type: field.kind, ...size, strokeColor: '#0f172a', strokeWidth: 2.5, fieldId: field.id }]
   if (!isTextualField(field)) return []
   return [{
-    ...base, id: id(), type: 'text', width: field.kind === 'initials' ? 80 : 180,
-    height: field.kind === 'address' ? 80 : 35, text: fieldDisplayValue(field),
+    ...base, id: id(), type: 'text', ...size, text: fieldDisplayValue(field),
     fontFamily: 'NotoSans', fontSize: 16, color: '#0f172a', bold: false, italic: false, underline: false,
     fieldId: field.id, fieldLink: 'linked', textAlign: 'left', singleLine: field.kind !== 'address', autoFit: false, minFontSize: 8,
   }]

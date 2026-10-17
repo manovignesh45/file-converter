@@ -21,6 +21,16 @@ Drawn, typed, and uploaded visual signatures can be previewed, placed repeatedly
 
 Unit and export tests, type-check, lint, and production build pass. The in-app browser was unavailable, so drag/drop, pointer drawing, responsive layout, signature library behavior in a real browser, and preview/export visual comparison remain unverified. Do not claim the Phase 2 exit gate until those checks pass.
 
+### Phase 1 and 2 acceptance attempt (2026-10-17)
+
+Quick Fill cards now support click-to-place and direct drag/drop without separate Place or Drag buttons. The drag preview shows the field value or signature, and each successful placement clears the active placement so a later page click cannot insert another copy. The placed object remains selected for adjustment. All 34 unit/export tests, TypeScript checking, lint, and the production build passed (lint reported two existing image warnings outside the editor). Browser discovery returned no available browser session, so the Phase 1 visual/geometry checks and Phase 2 interaction, responsive, signature-library, and preview/export comparisons remain open. Neither exit gate is signed off.
+
+The editor now keeps its editing toolbar visible with Quick Fill in the right sidebar. The separate Fill & Sign mode tab and right-side Properties panel were removed. Controls that were unique to Properties (content, linking, fitting, exact dimensions, rotation) are available under More options in the toolbar; drawing and highlight defaults are available when their tools are selected. Tests, TypeScript, and lint passed for this revision. The production build compiled but failed during final tracing because `.next/server/app/_not-found/page.js.nft.json` disappeared; the layout still needs a clean build and browser verification.
+
+Dragging a Quick Fill card over a page now previews its field outline and corner handles at the fitted destination. The drop uses the same position and selects the new item for adjustment. Placement is clamped to fit the smallest target page, with an error only when the field itself cannot fit. Selected text has inline decrease/increase font controls near its box. The placement unit suite now checks fitting across mixed-size pages; browser pointer and visual checks remain open.
+
+Quick Fill card dragging now uses pointer movement instead of native HTML drag events. One preview follows the pointer and changes into the placement outline over a page; releasing places the selected field at that preview position. This removes the native drag image handoff and gives the preview pointer-rate updates. Tests, TypeScript, and lint pass; browser confirmation of the motion remains pending.
+
 ## 1. Findings and recommended direction
 
 The repository already has a usable overlay PDF editor. Preserve PDF.js for loading/rendering, Fabric for object interactions, and pdf-lib for export. The redesign should extend these modules incrementally.
