@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { X } from 'lucide-react'
 import type { PdfFieldDefinition } from '../../types/pdfFields'
 import { fieldDisplayValue, isTextualField } from '../../lib/pdf/fields'
 import type { PdfPoint } from '../../types/pdfEditor'
@@ -14,6 +15,7 @@ interface Props {
   width: number
   onWidthChange: (width: number) => void
   thumbnailsOpen: boolean
+  onClose: () => void
   onSelectField: (id: string) => void
   onDragFieldStart: () => void
   onLocateField: (id: string, clientX: number, clientY: number) => DragLocation | null
@@ -36,7 +38,7 @@ interface Props {
   savedSignatureIds: string[]
 }
 
-export default function QuickFillPanel({ fields, activeFieldId, focusFieldId, width, onWidthChange, thumbnailsOpen, onSelectField, onDragFieldStart, onLocateField, onDropField, onChangeField, onCreateText, onCreateCommon, onCreateMark, onAddImage, onRemoveField, onRenameField, onMoveField, scope, onScopeChange, selectedPages, onTogglePage, pageCount, onCreateSignature, signatureUrls, savedSignatureIds }: Props) {
+export default function QuickFillPanel({ fields, activeFieldId, focusFieldId, width, onWidthChange, thumbnailsOpen, onClose, onSelectField, onDragFieldStart, onLocateField, onDropField, onChangeField, onCreateText, onCreateCommon, onCreateMark, onAddImage, onRemoveField, onRenameField, onMoveField, scope, onScopeChange, selectedPages, onTogglePage, pageCount, onCreateSignature, signatureUrls, savedSignatureIds }: Props) {
   const panelRef = useRef<HTMLElement>(null)
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -184,7 +186,7 @@ export default function QuickFillPanel({ fields, activeFieldId, focusFieldId, wi
 
   return <aside ref={panelRef} id="pdf-quick-fill" className="pdf-fill-panel" data-thumbnails={thumbnailsOpen ? 'open' : 'closed'} style={{ width }} aria-label="Quick Fill">
     <div className="pdf-fill-resize-handle" role="separator" aria-label="Resize Quick Fill" aria-orientation="vertical" aria-valuemin={288} aria-valuemax={928} aria-valuenow={width} tabIndex={0} title="Drag to resize Quick Fill" onPointerDown={startResize} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} onKeyDown={resizeWithKeyboard} onDoubleClick={() => onWidthChange(288)}><span aria-hidden="true">⋮</span></div>
-    <h2>Quick Fill</h2>
+    <div className="pdf-fill-heading"><h2>Quick Fill</h2><button type="button" className="pdf-fill-close pdf-icon-button" aria-label="Close Quick Fill" onClick={onClose}><X /></button></div>
     {activeFieldId && <p className="mb-3 rounded-lg bg-primary-50 px-3 py-2 text-xs text-primary-800" role="status">Click a page to place {fields.find(field => field.id === activeFieldId)?.label || 'this item'}. Press Escape to cancel.</p>}
     <p className="mb-3">Keep values here while editing this PDF. Click a card and then a page, or drag a card onto a page. Adjust the placed item there.</p>
     <div className="mb-3 space-y-2">

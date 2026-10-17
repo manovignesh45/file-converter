@@ -206,7 +206,7 @@ export default function Home() {
       <Header />
 
       {editorFile ? (
-        <div className="box-border h-full px-2 pb-4 pt-24 sm:px-4">
+        <div className="box-border h-full px-0 pb-0 pt-20 sm:px-4 sm:pb-4 sm:pt-24">
           <PdfEditor
             file={editorFile}
             initialPassword={options.pdfPassword}
