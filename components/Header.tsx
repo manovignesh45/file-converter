@@ -40,17 +40,15 @@ export default function Header() {
   }, [])
 
   return (
-    <header className={`fixed top-0 w-full z-50 transition-all duration-300 ${
-      scrolled ? 'bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-100' : 'bg-transparent'
-    }`}>
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 max-w-7xl">
+    <header className={`fixed top-0 w-full z-50 border-b border-gray-200 bg-white/95 backdrop-blur-md transition-shadow duration-200 ${scrolled ? 'shadow-sm' : ''}`}>
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 max-w-7xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="bg-gradient-to-br from-primary-500 to-primary-700 p-2 rounded-xl shadow-lg shadow-primary-500/20">
               <Camera className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900 tracking-tight">ConvertPro</h1>
+              <span className="text-xl font-bold text-gray-900 tracking-tight">ConvertPro</span>
             </div>
           </div>
           

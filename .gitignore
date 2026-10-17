@@ -11,3 +11,4 @@ public/processed/
 uploads/
 dist/
 build/
+.playwright-mcp
