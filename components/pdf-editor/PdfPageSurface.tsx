@@ -15,6 +15,7 @@ import {
   Triangle,
   util,
 } from 'fabric'
+import { PencilLine } from 'lucide-react'
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api'
 import type { PageViewport } from 'pdfjs-dist/types/src/display/display_utils'
 import { normalizeDegrees, pdfToViewport, viewportRotation, viewportScale, viewportToPdf } from '../../lib/pdf/coordinates'
@@ -221,8 +222,19 @@ export default function PdfPageSurface({
       // multi-selection command before they can be committed safely.
       selection: false,
       preserveObjectStacking: true,
+      // Touch swipes scroll the pages; the touchstart guard below claims the
+      // gesture when it should edit instead.
+      allowTouchScrolling: true,
     })
     fabricRef.current = canvas
+    // Select and Edit text only scroll unless the touch lands on an object;
+    // every other tool and field placement needs the drag for itself.
+    const claimTouch = (event: TouchEvent) => {
+      if (!event.cancelable || event.touches.length > 1) return
+      const scrolls = !placingField && (tool === 'select' || tool === 'editText')
+      if (!scrolls || canvas.findTarget(event).target) event.preventDefault()
+    }
+    canvas.upperCanvasEl.addEventListener('touchstart', claimTouch, { passive: false })
 
     const scale = viewportScale(viewport)
     let disposed = false
@@ -440,6 +452,7 @@ export default function PdfPageSurface({
     return () => {
       disposed = true
       fabricRef.current = null
+      canvas.upperCanvasEl.removeEventListener('touchstart', claimTouch)
       void canvas.dispose()
     }
   }, [assetUrls, drawColor, drawWidth, elements, onActivate, onAddAt, onAddDrawing, onModify, onSelect, pageIndex, placingField, renderVisible, tool, viewport])
@@ -603,10 +616,12 @@ export default function PdfPageSurface({
         {!textRuns.length && <p className="pdf-text-edit-empty">This page has no editable text. It may be a scanned image.</p>}
       </div>}
       {inlineEditor}
-      {selectedText && selectedTextBox && !inlineEdit && <div className="pdf-inline-font-controls" style={{ left: Math.max(4, Math.min(selectedTextBox.left, viewport.width - 92)), top: selectedTextBox.top >= 44 ? selectedTextBox.top - 40 : Math.min(viewport.height - 36, selectedTextBox.top + selectedTextBox.height + 4) }} onPointerDown={event => event.stopPropagation()}>
+      {selectedText && selectedTextBox && !inlineEdit && <div className="pdf-inline-font-controls" style={{ left: Math.max(4, Math.min(selectedTextBox.left, viewport.width - 120)), top: selectedTextBox.top >= 44 ? selectedTextBox.top - 40 : Math.min(viewport.height - 36, selectedTextBox.top + selectedTextBox.height + 4) }} onPointerDown={event => event.stopPropagation()}>
         <button type="button" aria-label="Decrease selected text size" disabled={selectedText.fontSize <= 4} onClick={() => onModify({ ...selectedText, fontSize: Math.max(4, selectedText.fontSize - 1) })}>−</button>
         <span aria-label={`Font size ${selectedText.fontSize}`}>{selectedText.fontSize}</span>
         <button type="button" aria-label="Increase selected text size" disabled={selectedText.fontSize >= 500} onClick={() => onModify({ ...selectedText, fontSize: Math.min(500, selectedText.fontSize + 1) })}>+</button>
+        {/* Double-click also edits, but touch screens have no reliable double tap. */}
+        <button type="button" aria-label="Edit selected text" title="Edit text" onClick={() => setInlineEdit({ element: selectedText, isNew: false, text: selectedText.text })}><PencilLine /></button>
       </div>}
       <span className="pdf-page-number">{pageIndex + 1}</span>
     </section>

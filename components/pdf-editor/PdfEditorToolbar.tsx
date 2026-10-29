@@ -17,8 +17,8 @@ export const editorTools: Array<{ value: PdfEditorTool; label: string; shortcut:
 ]
 
 const toolHints: Partial<Record<PdfEditorTool, string>> = {
-  select: 'Click an item to select it. Double-click text to edit it.',
-  editText: 'Click any line of PDF text to change it. Press Enter to apply, Esc to cancel.',
+  select: 'Tap or click an item to select it. Double-click text, or use its edit button, to edit it.',
+  editText: 'Tap or click any line of PDF text to change it. Press Enter to apply, Esc to cancel.',
   text: 'Click on the page to add a text box.',
   rectangle: 'Click on the page to add a rectangle.',
   ellipse: 'Click on the page to add an ellipse.',

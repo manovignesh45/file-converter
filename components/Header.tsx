@@ -27,9 +27,45 @@ const X = ({ className }: { className?: string }) => (
   </svg>
 )
 
+const Download = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
+  </svg>
+)
+
+// Chromium's install prompt event; not yet in TypeScript's DOM types.
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
+
 export default function Header() {
   const [showAbout, setShowAbout] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+
+  useEffect(() => {
+    const handlePrompt = (event: Event) => {
+      // Show our own button instead of the browser's mini-infobar.
+      event.preventDefault()
+      setInstallPrompt(event as BeforeInstallPromptEvent)
+    }
+    const handleInstalled = () => setInstallPrompt(null)
+    window.addEventListener('beforeinstallprompt', handlePrompt)
+    window.addEventListener('appinstalled', handleInstalled)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handlePrompt)
+      window.removeEventListener('appinstalled', handleInstalled)
+    }
+  }, [])
+
+  const installApp = async () => {
+    if (!installPrompt) return
+    await installPrompt.prompt()
+    await installPrompt.userChoice
+    // A prompt event can only be used once.
+    setInstallPrompt(null)
+  }
 
   useEffect(() => {
     const handleScroll = () => {
@@ -40,7 +76,7 @@ export default function Header() {
   }, [])
 
   return (
-    <header className={`fixed top-0 w-full z-50 border-b border-gray-200 bg-white/95 backdrop-blur-md transition-shadow duration-200 ${scrolled ? 'shadow-sm' : ''}`}>
+    <header className={`fixed top-0 w-full z-50 pt-[env(safe-area-inset-top)] border-b border-gray-200 bg-white/95 backdrop-blur-md transition-shadow duration-200 ${scrolled ? 'shadow-sm' : ''}`}>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 max-w-7xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -53,6 +89,15 @@ export default function Header() {
           </div>
           
           <nav className="flex items-center space-x-4">
+            {installPrompt && (
+              <button
+                onClick={installApp}
+                className="flex items-center rounded-lg bg-primary-50 px-3 py-1.5 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-100"
+              >
+                <Download className="w-4 h-4 mr-1.5" />
+                Install app
+              </button>
+            )}
             <button 
               onClick={() => setShowAbout(true)}
               className="text-gray-600 hover:text-primary-600 transition-colors flex items-center text-sm font-medium"

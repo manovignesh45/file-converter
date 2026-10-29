@@ -223,6 +223,7 @@
 .pdf-inline-font-controls { @apply absolute z-30 flex h-8 items-center gap-1 rounded-lg border border-primary-300 bg-white px-1 text-xs font-semibold text-gray-800 shadow-md; }
 .pdf-inline-font-controls button { @apply flex h-6 w-6 items-center justify-center rounded text-base hover:bg-primary-50 disabled:opacity-40; }
 .pdf-inline-font-controls span { @apply min-w-5 text-center; }
+.pdf-inline-font-controls svg { @apply h-4 w-4; }
 .pdf-field-card.active { @apply border-primary-500 bg-primary-50; }
 .pdf-page-shell.is-placing .upper-canvas { cursor: crosshair !important; }
 .pdf-signature-backdrop { @apply fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4; }
@@ -254,6 +255,8 @@
 .pdf-editor-text-layer.is-selecting {
   pointer-events: auto;
   cursor: text;
+  /* A touch drag marks the highlight area instead of scrolling. */
+  touch-action: none;
 }
 
 .pdf-page-shell .canvas-container {
@@ -335,12 +338,12 @@ textarea.pdf-inline-text-editor {
 }
 
 @media (max-width: 767px) {
-  .pdf-editor-header { height: 3rem; gap: .125rem; padding: 0 .25rem; }
+  .pdf-editor-header { height: calc(3rem + env(safe-area-inset-top)); gap: .125rem; padding: env(safe-area-inset-top) .25rem 0; }
   .pdf-editor-session-note, .pdf-shortcuts-button, .pdf-header-toggle span { display: none; }
   .pdf-header-toggle { width: 2.25rem; justify-content: center; padding: 0; }
   .pdf-editor-export { padding: 0 .75rem; }
   .pdf-thumbnail-sidebar { position: absolute; top: 0; left: 0; bottom: 0; z-index: 30; width: min(11rem, 70vw); box-shadow: 8px 0 20px rgba(15, 23, 42, 0.14); }
-  .pdf-fill-panel, .pdf-fill-panel[data-thumbnails='open'] { position: absolute; top: auto; right: 0; bottom: 0; left: 0; z-index: 30; width: 100% !important; max-width: 100%; height: min(74%, 32rem); border-top: 1px solid #cbd5e1; border-left: 0; border-radius: 1rem 1rem 0 0; padding: 1rem; box-shadow: 0 -8px 24px rgba(15, 23, 42, .16); }
+  .pdf-fill-panel, .pdf-fill-panel[data-thumbnails='open'] { position: absolute; top: auto; right: 0; bottom: 0; left: 0; z-index: 30; width: 100% !important; max-width: 100%; height: min(74%, 32rem); border-top: 1px solid #cbd5e1; border-left: 0; border-radius: 1rem 1rem 0 0; padding: 1rem; padding-bottom: max(1rem, env(safe-area-inset-bottom)); box-shadow: 0 -8px 24px rgba(15, 23, 42, .16); }
   .pdf-fill-resize-handle { display: none; }
   .pdf-fill-close { display: inline-flex; }
   /* Tools on one scrolling row, options plus undo on a second row of fixed height. */
@@ -351,8 +354,17 @@ textarea.pdf-inline-text-editor {
   .pdf-editor-context { height: 2.5rem; }
   .pdf-tool-button { width: 2.75rem; height: 2.75rem; }
   .pdf-editor-pages { gap: 1rem; padding: 1rem .5rem 1.5rem; }
-  .pdf-editor-status { padding: 0 .25rem; }
+  /* The status bar holds page navigation and zoom, so it stays visible on phones. */
+  .pdf-editor-status { height: calc(2.5rem + env(safe-area-inset-bottom)); padding: 0 .25rem env(safe-area-inset-bottom); }
   .pdf-status-message { display: none; }
+  .pdf-signature-backdrop { align-items: flex-end; padding: 0; }
+  .pdf-signature-dialog { max-height: 92dvh; border-radius: 1rem 1rem 0 0; padding: 1.25rem 1rem max(1.25rem, env(safe-area-inset-bottom)); }
+}
+
+/* Finger-sized targets for the small on-page controls. */
+@media (pointer: coarse) {
+  .pdf-inline-font-controls { height: 2.5rem; }
+  .pdf-inline-font-controls button { height: 2rem; width: 2rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
