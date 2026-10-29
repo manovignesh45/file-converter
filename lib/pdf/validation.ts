@@ -46,6 +46,15 @@ function validBase(element: any): boolean {
   )
 }
 
+function validReplacement(replaces: any): boolean {
+  return Boolean(replaces) &&
+    finiteNumber(replaces.x) && finiteNumber(replaces.y) &&
+    finiteNumber(replaces.width) && replaces.width > 0 && replaces.width <= 20_000 &&
+    finiteNumber(replaces.height) && replaces.height > 0 && replaces.height <= 20_000 &&
+    typeof replaces.text === 'string' && replaces.text.length <= 20_000 &&
+    validColor(replaces.coverColor)
+}
+
 function validElement(element: any): element is PdfEditorElement {
   if (!validBase(element)) return false
 
@@ -69,7 +78,8 @@ function validElement(element: any): element is PdfEditorElement {
           element.exportLayout.lines.join('').length <= 20_000 &&
           finiteNumber(element.exportLayout.fontSize) && element.exportLayout.fontSize >= 4 && element.exportLayout.fontSize <= 500 &&
           element.exportLayout.lines.join(' ').replace(/\s+/g, ' ').trim() === element.text.replace(/\s+/g, ' ').trim()
-        ))
+        )) &&
+        (element.replaces === undefined || validReplacement(element.replaces))
     case 'image':
       return typeof element.assetId === 'string' && element.assetId.length <= 100 &&
         ['image/png', 'image/jpeg'].includes(element.mimeType) &&

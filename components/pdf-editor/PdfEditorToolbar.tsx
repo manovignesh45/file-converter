@@ -1,10 +1,11 @@
 'use client'
 
-import { ArrowUpRight, Circle, Copy, Highlighter, ImagePlus, MousePointer2, MoveDown, MoveUp, Pencil, Redo2, Slash, Square, Trash2, Type, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowUpRight, Circle, Copy, Highlighter, ImagePlus, MousePointer2, MoveDown, MoveUp, Pencil, Redo2, Slash, Square, TextCursorInput, Trash2, Type, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { PdfEditorElement, PdfEditorTool, PdfFontFamily } from '../../types/pdfEditor'
 
 const tools: Array<{ value: PdfEditorTool; label: string; icon: typeof MousePointer2 }> = [
   { value: 'select', label: 'Select', icon: MousePointer2 },
+  { value: 'editText', label: 'Edit text', icon: TextCursorInput },
   { value: 'text', label: 'Text', icon: Type },
   { value: 'image', label: 'Image', icon: ImagePlus },
   { value: 'rectangle', label: 'Rectangle', icon: Square },
@@ -55,6 +56,7 @@ export default function PdfEditorToolbar({ tool, onToolChange, onImageRequest, o
       </div>
       <div className="pdf-editor-context" aria-label="Selected object formatting">
         {tool === 'draw' && <><label className="pdf-toolbar-color">Draw color <input aria-label="Drawing color" type="color" value={drawColor} onChange={event => onDefaultsChange({ drawColor: event.target.value })} /></label><label className="pdf-toolbar-color">Width <input aria-label="Drawing width" className="pdf-toolbar-number" type="number" min="1" max="20" value={drawWidth} onChange={event => onDefaultsChange({ drawWidth: Number(event.target.value) })} /></label></>}
+        {tool === 'editText' && !selectedElement && <span className="pdf-toolbar-hint">Click any line of PDF text to change it. Press Enter to apply, Esc to cancel.</span>}
         {tool === 'highlight' && <label className="pdf-toolbar-color">Highlight color <input aria-label="Highlight color" type="color" value={highlightColor} onChange={event => onDefaultsChange({ highlightColor: event.target.value })} /></label>}
         {selectedElement?.type === 'text' && <>
           <select aria-label="Font family" value={selectedElement.fontFamily} onChange={event => update({ fontFamily: event.target.value as PdfFontFamily })}><option value="Helvetica">Helvetica</option><option value="TimesRoman">Times</option><option value="Courier">Courier</option><option value="NotoSans">Noto Sans</option></select>

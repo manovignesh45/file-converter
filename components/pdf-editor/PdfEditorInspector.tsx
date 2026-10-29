@@ -17,9 +17,10 @@ export default function PdfEditorInspector({ element, onChange, onClose }: Props
 
   return <div id="pdf-advanced-options" className="pdf-editor-advanced" role="dialog" aria-label="More editing options">
     <div className="mb-4 flex items-center justify-between gap-2"><h2 className="font-semibold text-gray-900">More options</h2><button className="text-sm font-medium text-primary-700" onClick={onClose}>Close</button></div>
-    {!element ? <p className="text-sm leading-6 text-gray-500">Select an added item to edit its content and size. Original PDF text is read-only.</p> : <div className="space-y-4">
+    {!element ? <p className="text-sm leading-6 text-gray-500">Select an added item to edit its content and size. To change the PDF&rsquo;s own text, use Edit text.</p> : <div className="space-y-4">
       {element.type === 'text' && <>
         {element.fieldId && <div className="rounded-lg bg-primary-50 p-2 text-xs text-primary-800">{element.fieldLink === 'linked' ? 'Linked to Quick Fill value' : 'Independent value'}{element.fieldLink === 'linked' && <button className="ml-2 font-bold underline" onClick={() => update({ fieldLink: 'independent' })}>Detach</button>}</div>}
+        {element.replaces && <div className="rounded-lg bg-primary-50 p-2 text-xs leading-5 text-primary-800">Replaces “{element.replaces.text}”. Delete this item to restore the original. The original is covered, not removed, so it can still be copied or extracted from the exported PDF.</div>}
         <label className="pdf-property-field">Text<textarea value={element.text} onChange={event => update({ text: event.target.value })} rows={3} /></label>
         <label className="pdf-property-field">Alignment<select value={element.textAlign ?? 'left'} onChange={event => update({ textAlign: event.target.value as 'left' | 'center' | 'right' })}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
         <label className="pdf-property-label"><input type="checkbox" checked={element.singleLine ?? false} onChange={event => update({ singleLine: event.target.checked })} />Single line</label>

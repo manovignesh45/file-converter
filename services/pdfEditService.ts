@@ -218,6 +218,12 @@ export class PdfEditService {
       const imageCache = new Map<string, PDFImage>()
       pdfDocument.registerFontkit(fontkit)
 
+      // Covers hide replaced original text, so they go beneath every added element.
+      for (const element of payload.elements) {
+        if (element.type !== 'text' || !element.replaces) continue
+        const { x, y, width, height, coverColor } = element.replaces
+        pdfDocument.getPage(element.pageIndex).drawRectangle({ x, y, width, height, color: hexToRgb(coverColor) })
+      }
       for (const element of [...payload.elements].sort((a, b) => a.pageIndex - b.pageIndex || a.zIndex - b.zIndex)) {
         const page = pdfDocument.getPage(element.pageIndex)
         await this.drawElement(pdfDocument, page, element, assetMap, fontCache, imageCache)

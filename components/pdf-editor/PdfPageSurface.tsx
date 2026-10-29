@@ -19,7 +19,8 @@ import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api'
 import type { PageViewport } from 'pdfjs-dist/types/src/display/display_utils'
 import { normalizeDegrees, pdfToViewport, viewportRotation, viewportScale, viewportToPdf } from '../../lib/pdf/coordinates'
 import { clientToPdfPoint } from '../../lib/pdf/placement'
-import { browserTextLayout } from '../../lib/pdf/browserTextLayout'
+import { browserTextLayout, browserTextWidth, cssFontFamily } from '../../lib/pdf/browserTextLayout'
+import { buildTextRuns, createReplacementElement, findReplacement, sampleTextColors, type PdfFontInfoLike, type PdfTextItemLike, type PdfTextRun } from '../../lib/pdf/textRuns'
 import type { PdfDrawingElement, PdfEditorElement, PdfEditorTool, PdfHighlightElement, PdfPoint, PdfTextElement } from '../../types/pdfEditor'
 
 // Keep thin marks easy to select without changing their visible or exported stroke.
@@ -43,8 +44,11 @@ interface PdfPageSurfaceProps {
   onAddDrawing: (element: PdfDrawingElement) => void
   onAddHighlights: (elements: PdfHighlightElement[]) => void
   onModify: (element: PdfEditorElement) => void
+  onReplaceText: (element: PdfTextElement) => void
   placingField?: boolean
 }
+
+interface InlineTextEdit { element: PdfTextElement; isNew: boolean; text: string }
 
 function viewportBox(point: PdfPoint, width: number, height: number, viewport: PageViewport) {
   const corners = [point, { x: point.x + width, y: point.y }, { x: point.x, y: point.y + height }, { x: point.x + width, y: point.y + height }].map(corner => pdfToViewport(corner, viewport))
@@ -100,6 +104,7 @@ export default function PdfPageSurface({
   onAddDrawing,
   onAddHighlights,
   onModify,
+  onReplaceText,
   placingField = false,
 }: PdfPageSurfaceProps) {
   const backgroundRef = useRef<HTMLCanvasElement>(null)
@@ -116,6 +121,11 @@ export default function PdfPageSurface({
   const viewport = useMemo(() => page.getViewport({ scale: zoom }), [page, zoom])
   const selectedText = elements.find((element): element is PdfTextElement => element.id === selectedId && element.type === 'text')
   const selectedTextBox = selectedText ? viewportBox(selectedText, selectedText.width, selectedText.height, viewport) : null
+  const [textRuns, setTextRuns] = useState<PdfTextRun[] | null>(null)
+  const [inlineEdit, setInlineEdit] = useState<InlineTextEdit | null>(null)
+  // Blur, Enter and Escape can all end one edit; only the first one counts.
+  const inlineEditRef = useRef<InlineTextEdit | null>(null)
+  inlineEditRef.current = inlineEdit
 
 
   useEffect(() => {
@@ -184,6 +194,23 @@ export default function PdfPageSurface({
   }, [page, renderVisible, viewport])
 
   useEffect(() => {
+    if (tool !== 'editText' || !renderVisible || textRuns) return
+    let cancelled = false
+    void page.getTextContent().then(content => {
+      if (cancelled) return
+      const items = content.items.filter(item => 'str' in item) as PdfTextItemLike[]
+      // Fonts are in commonObjs once the page has rendered; style data is the fallback.
+      const fontInfo = (fontName: string) => {
+        try { return page.commonObjs.has(fontName) ? page.commonObjs.get(fontName) as PdfFontInfoLike : undefined } catch { return undefined }
+      }
+      setTextRuns(buildTextRuns(items, content.styles, fontInfo))
+    }).catch(error => {
+      if (!cancelled) { console.error('PDF text extraction failed:', error); setTextRuns([]) }
+    })
+    return () => { cancelled = true }
+  }, [page, renderVisible, textRuns, tool])
+
+  useEffect(() => {
     const element = overlayRef.current
     if (!element || !renderVisible) return
     const canvas = new Canvas(element, {
@@ -204,17 +231,36 @@ export default function PdfPageSurface({
         await Promise.all(notoFonts.map(item => document.fonts.load(`${item.italic ? 'italic ' : ''}${item.bold ? 'bold ' : ''}16px "ConvertPro Noto Sans"`)))
         if (disposed) return
       }
+      // Covers hide replaced original text beneath every added object, as in export.
+      for (const item of elements) {
+        if (item.type !== 'text' || !item.replaces) continue
+        const cover = item.replaces
+        canvas.add(new Rect({
+          ...objectOptions({ ...item, ...cover, rotation: 0, opacity: 1 }, viewport),
+          width: cover.width * scale,
+          height: cover.height * scale,
+          fill: cover.coverColor,
+          strokeWidth: 0,
+          selectable: false,
+          evented: false,
+          data: {},
+        }))
+      }
       for (const editorElement of [...elements].sort((a, b) => a.zIndex - b.zIndex)) {
         const base = objectOptions(editorElement, viewport)
         let object: any
         switch (editorElement.type) {
           case 'text': {
             const layout = browserTextLayout(editorElement)
+            // Single lines never wrap in export, so keep Fabric from wrapping them either.
+            const width = editorElement.singleLine && !editorElement.autoFit
+              ? Math.max(editorElement.width, browserTextWidth(editorElement) + 2)
+              : editorElement.width
             object = new Textbox(layout.lines.join('\n'), {
               ...base,
-              width: editorElement.width * scale,
+              width: width * scale,
               fontSize: layout.fontSize * scale,
-              fontFamily: editorElement.fontFamily === 'TimesRoman' ? 'Times New Roman' : editorElement.fontFamily === 'NotoSans' ? 'ConvertPro Noto Sans' : editorElement.fontFamily,
+              fontFamily: cssFontFamily(editorElement.fontFamily),
               fontWeight: editorElement.bold ? 'bold' : 'normal',
               fontStyle: editorElement.italic ? 'italic' : 'normal',
               underline: editorElement.underline,
@@ -353,7 +399,7 @@ export default function PdfPageSurface({
         onAddAt(pageIndex, clientToPdfPoint(event.e.clientX, event.e.clientY, rect, viewport))
         return
       }
-      if (tool === 'select' || tool === 'highlight') return
+      if (tool === 'select' || tool === 'highlight' || tool === 'editText') return
       const scene = canvas.getScenePoint(event.e)
       if (tool === 'draw') {
         const first = viewportToPdf(scene, viewport)
@@ -364,6 +410,12 @@ export default function PdfPageSurface({
         return
       }
       onAddAt(pageIndex, viewportToPdf(scene, viewport))
+    })
+    canvas.on('mouse:dblclick', (event: any) => {
+      // Fabric can omit the target on dblclick; the first click already selected it.
+      const object = (event.target ?? canvas.getActiveObject()) as { data?: { id?: string } } | undefined
+      const target = elements.find(item => item.id === object?.data?.id)
+      if (target?.type === 'text') setInlineEdit({ element: target, isNew: false, text: target.text })
     })
     canvas.on('mouse:move', (event: any) => {
       if (!drawingPointsRef.current || !temporaryDrawingRef.current) return
@@ -426,6 +478,96 @@ export default function PdfPageSurface({
     highlightStartRef.current = null
   }
 
+  const sampleRunColors = (run: PdfTextRun) => {
+    const fallback = { textColor: '#000000', backgroundColor: '#ffffff' }
+    const canvas = backgroundRef.current
+    const context = canvas?.getContext('2d')
+    if (!canvas || !context) return fallback
+    const ratio = canvas.width / viewport.width
+    const box = viewportBox({ x: run.bounds.x, y: run.bounds.y }, run.bounds.width, run.bounds.height, viewport)
+    const inner = {
+      left: Math.floor(box.left * ratio), top: Math.floor(box.top * ratio),
+      right: Math.ceil((box.left + box.width) * ratio), bottom: Math.ceil((box.top + box.height) * ratio),
+    }
+    const margin = Math.max(2, Math.round(3 * ratio))
+    const left = Math.max(0, inner.left - margin)
+    const top = Math.max(0, inner.top - margin)
+    const width = Math.min(canvas.width, inner.right + margin) - left
+    const height = Math.min(canvas.height, inner.bottom + margin) - top
+    if (width < 1 || height < 1) return fallback
+    try {
+      const { data } = context.getImageData(left, top, width, height)
+      return sampleTextColors(data, width, height, { left: inner.left - left, top: inner.top - top, right: inner.right - left, bottom: inner.bottom - top })
+    } catch {
+      return fallback
+    }
+  }
+
+  const startRunEdit = (run: PdfTextRun) => {
+    onActivate(pageIndex)
+    const existing = findReplacement(elements, run)
+    if (existing) {
+      onSelect(existing.id)
+      setInlineEdit({ element: existing, isNew: false, text: existing.text })
+      return
+    }
+    const { textColor, backgroundColor } = sampleRunColors(run)
+    const element = createReplacementElement(run, { id: crypto.randomUUID(), pageIndex, color: textColor, coverColor: backgroundColor })
+    setInlineEdit({ element, isNew: true, text: element.text })
+  }
+
+  const finishInlineEdit = (save: boolean) => {
+    const edit = inlineEditRef.current
+    if (!edit) return
+    inlineEditRef.current = null
+    setInlineEdit(null)
+    if (!save) return
+    const withText = (element: PdfTextElement): PdfTextElement => ({
+      ...element,
+      text: edit.text,
+      width: element.singleLine ? Math.max(element.width, browserTextWidth(element, edit.text) + 1) : element.width,
+    })
+    if (edit.isNew) {
+      if (edit.text !== edit.element.text) onReplaceText(withText(edit.element))
+      return
+    }
+    const current = elements.find(item => item.id === edit.element.id)
+    if (current?.type === 'text' && current.text !== edit.text) onModify(withText(current))
+  }
+
+  const inlineEditor = (() => {
+    if (!inlineEdit) return null
+    const { element, text } = inlineEdit
+    const box = viewportBox(element, element.width, element.height, viewport)
+    const scale = viewportScale(viewport)
+    const style = {
+      left: box.left,
+      top: box.top,
+      width: element.singleLine ? Math.max(box.width, browserTextWidth(element, text) * scale + 8) : box.width,
+      minHeight: box.height,
+      fontFamily: `"${cssFontFamily(element.fontFamily)}"`,
+      fontSize: element.fontSize * scale,
+      fontWeight: element.bold ? 'bold' : 'normal',
+      fontStyle: element.italic ? 'italic' : 'normal',
+      color: element.color,
+      background: element.replaces?.coverColor ?? '#ffffff',
+    }
+    const shared = {
+      className: 'pdf-inline-text-editor',
+      style,
+      value: text,
+      autoFocus: true,
+      'aria-label': element.replaces ? `Replace "${element.replaces.text}"` : 'Edit text',
+      onChange: (event: { target: { value: string } }) => setInlineEdit({ ...inlineEdit, text: event.target.value }),
+      onBlur: () => finishInlineEdit(true),
+      onPointerDown: (event: ReactPointerEvent) => event.stopPropagation(),
+      onFocus: (event: { target: HTMLInputElement | HTMLTextAreaElement }) => event.target.select(),
+    }
+    return element.singleLine
+      ? <input {...shared} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); finishInlineEdit(true) } else if (event.key === 'Escape') { event.preventDefault(); finishInlineEdit(false) } }} />
+      : <textarea {...shared} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); finishInlineEdit(false) } }} />
+  })()
+
   return (
     <section
       ref={shellRef}
@@ -443,7 +585,24 @@ export default function PdfPageSurface({
         onPointerUp={finishHighlight}
       />
       <canvas ref={overlayRef} />
-      {selectedText && selectedTextBox && <div className="pdf-inline-font-controls" style={{ left: Math.max(4, Math.min(selectedTextBox.left, viewport.width - 92)), top: selectedTextBox.top >= 44 ? selectedTextBox.top - 40 : Math.min(viewport.height - 36, selectedTextBox.top + selectedTextBox.height + 4) }} onPointerDown={event => event.stopPropagation()}>
+      {tool === 'editText' && textRuns && !inlineEdit && <div className="pdf-text-edit-layer">
+        {textRuns.map(run => {
+          const box = viewportBox({ x: run.bounds.x, y: run.bounds.y }, run.bounds.width, run.bounds.height, viewport)
+          return <button
+            key={run.id}
+            type="button"
+            className={`pdf-text-run ${findReplacement(elements, run) ? 'is-edited' : ''}`}
+            style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+            aria-label={`Edit text: ${run.text}`}
+            title="Click to edit this text"
+            onPointerDown={event => event.stopPropagation()}
+            onClick={() => startRunEdit(run)}
+          />
+        })}
+        {!textRuns.length && <p className="pdf-text-edit-empty">This page has no editable text. It may be a scanned image.</p>}
+      </div>}
+      {inlineEditor}
+      {selectedText && selectedTextBox && !inlineEdit && <div className="pdf-inline-font-controls" style={{ left: Math.max(4, Math.min(selectedTextBox.left, viewport.width - 92)), top: selectedTextBox.top >= 44 ? selectedTextBox.top - 40 : Math.min(viewport.height - 36, selectedTextBox.top + selectedTextBox.height + 4) }} onPointerDown={event => event.stopPropagation()}>
         <button type="button" aria-label="Decrease selected text size" disabled={selectedText.fontSize <= 4} onClick={() => onModify({ ...selectedText, fontSize: Math.max(4, selectedText.fontSize - 1) })}>−</button>
         <span aria-label={`Font size ${selectedText.fontSize}`}>{selectedText.fontSize}</span>
         <button type="button" aria-label="Increase selected text size" disabled={selectedText.fontSize >= 500} onClick={() => onModify({ ...selectedText, fontSize: Math.min(500, selectedText.fontSize + 1) })}>+</button>

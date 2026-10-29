@@ -248,6 +248,44 @@
   pointer-events: none !important;
 }
 
+.pdf-text-edit-layer {
+  @apply absolute inset-0;
+  z-index: 4;
+}
+
+.pdf-text-run {
+  @apply absolute cursor-text rounded-sm outline-none;
+  background: transparent;
+}
+
+.pdf-text-run:hover,
+.pdf-text-run:focus-visible {
+  @apply outline outline-2 outline-primary-500;
+  background: rgb(99 102 241 / 8%);
+}
+
+.pdf-text-run.is-edited {
+  @apply outline-dashed outline-1 outline-primary-400;
+}
+
+.pdf-text-edit-empty {
+  @apply absolute left-1/2 top-4 -translate-x-1/2 rounded-lg bg-gray-900/80 px-3 py-2 text-center text-xs font-medium text-white;
+}
+
+.pdf-inline-text-editor {
+  @apply absolute z-20 resize-none border-0 p-0 outline outline-2 outline-primary-500;
+  line-height: 1.2;
+  white-space: pre;
+}
+
+textarea.pdf-inline-text-editor {
+  white-space: pre-wrap;
+}
+
+.pdf-toolbar-hint {
+  @apply text-xs text-gray-500;
+}
+
 .pdf-property-field {
   @apply block text-sm font-medium text-gray-700;
 }

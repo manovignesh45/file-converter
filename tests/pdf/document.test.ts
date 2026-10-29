@@ -19,6 +19,13 @@ describe('editor document export projection', () => {
     expect(drawing.points[0]).toEqual({ x: 10, y: 20 })
   })
 
+  it('does not copy a replaced-text cover onto a duplicate', () => {
+    const edit = { id: 'old', pageIndex: 0, zIndex: 0, x: 10, y: 20, width: 50, height: 14, rotation: 0, opacity: 1, type: 'text' as const, text: 'New', fontFamily: 'Helvetica' as const, fontSize: 12, color: '#000000', bold: false, italic: false, underline: false, replaces: { x: 9, y: 18, width: 40, height: 14, text: 'Old', coverColor: '#ffffff' } }
+    const cloned = cloneElementToPage(edit, 'new', 0)
+    expect(cloned).not.toHaveProperty('replaces')
+    expect(edit.replaces.text).toBe('Old')
+  })
+
   it('rejects a broken stable page reference instead of falling back to an index', () => {
     const document = createEditorDocument('doc', 'sample.pdf')
     document.pages = [createDocumentPage({ pageIndex: 0, width: 600, height: 800, rotation: 0 }, [0, 0, 600, 800])]

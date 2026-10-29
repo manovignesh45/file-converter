@@ -2,6 +2,7 @@ import type { PdfFieldDefinition } from './pdfFields'
 
 export type PdfEditorTool =
   | 'select'
+  | 'editText'
   | 'text'
   | 'image'
   | 'rectangle'
@@ -48,6 +49,20 @@ export interface PdfTextElement extends PdfElementBase {
   autoFit?: boolean
   minFontSize?: number
   exportLayout?: { lines: string[]; fontSize: number }
+  /**
+   * Original PDF text this element replaces. The area is painted with `coverColor`
+   * beneath all added content; the original text remains in the file underneath.
+   */
+  replaces?: PdfTextReplacement
+}
+
+export interface PdfTextReplacement {
+  x: number
+  y: number
+  width: number
+  height: number
+  text: string
+  coverColor: string
 }
 
 export interface PdfImageElement extends PdfElementBase {

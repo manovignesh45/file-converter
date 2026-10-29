@@ -75,6 +75,38 @@ describe('PDF edit export', () => {
     await opened.destroy()
   })
 
+  it('paints a replacement cover between the original text and the new text', async () => {
+    const source = await PDFDocument.create()
+    const page = source.addPage([300, 500])
+    page.drawText('Old price $40', { x: 50, y: 400, size: 12, font: await source.embedFont('Helvetica') })
+    const input = Buffer.from(await source.save())
+    const payload: PdfEditPayload = {
+      version: 1,
+      pages: [{ pageIndex: 0, width: 300, height: 500, rotation: 0 }],
+      elements: [{
+        id: 'edit', type: 'text', pageIndex: 0, zIndex: 0, x: 50, y: 397.6, width: 90, height: 14.4, rotation: 0, opacity: 1,
+        text: 'New price $55', fontFamily: 'Helvetica', fontSize: 12, color: '#000000', bold: false, italic: false, underline: false, singleLine: true,
+        replaces: { x: 49, y: 396, width: 76, height: 13, text: 'Old price $40', coverColor: '#ffffff' },
+      }],
+    }
+    const result = await new PdfEditService().exportPdf(input, 'replace.pdf', payload, [])
+    outputs.push(result.outputPath)
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const opened = await pdfjs.getDocument({ data: new Uint8Array(await fs.readFile(result.outputPath)), verbosity: 0 }).promise
+    const exportedPage = await opened.getPage(1)
+    const content = await exportedPage.getTextContent()
+    const strings = content.items.map(item => 'str' in item ? item.str : '')
+    const replacement = content.items.find(item => 'str' in item && item.str === 'New price $55')
+    expect(replacement && 'transform' in replacement ? replacement.transform[5] : 0).toBeCloseTo(400, 1)
+    // Covering, not removal: the original text is still in the file.
+    expect(strings).toContain('Old price $40')
+    const { fnArray } = await exportedPage.getOperatorList()
+    const textOps = fnArray.flatMap((fn, index) => fn === pdfjs.OPS.showText ? [index] : [])
+    expect(textOps).toHaveLength(2)
+    expect(fnArray.slice(textOps[0], textOps[1]).includes(pdfjs.OPS.constructPath)).toBe(true)
+    await opened.destroy()
+  })
+
   it('reports unsupported standard-font characters clearly', async () => {
     const source = await PDFDocument.create()
     source.addPage([300, 500])

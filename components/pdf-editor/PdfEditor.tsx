@@ -29,6 +29,7 @@ import type {
   PdfHighlightElement,
   PdfDocumentPage,
   PdfPoint,
+  PdfTextElement,
 } from '../../types/pdfEditor'
 
 interface PdfEditorProps {
@@ -190,18 +191,20 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     setHistory(current => commitHistory(current, { ...current.present, elements: next }))
   }, [])
 
-  const addElements = useCallback((newElements: PdfEditorElement[]) => {
+  const addElements = useCallback((newElements: PdfEditorElement[], options: { keepTool?: boolean } = {}) => {
     setHistory(current => {
       const nextZ = current.present.elements.reduce((maximum, item) => Math.max(maximum, item.zIndex), -1) + 1
       const prepared = newElements.map((element, index) => ({ ...element, pageId: element.pageId ?? sourcePageId(element.pageIndex), zIndex: nextZ + index }))
       return commitHistory(current, { ...current.present, elements: [...current.present.elements, ...prepared] })
     })
     setSelectedId(newElements.at(-1)?.id || null)
-    setTool('select')
+    if (!options.keepTool) setTool('select')
   }, [])
 
   const addDrawing = useCallback((element: PdfDrawingElement) => addElements([element]), [addElements])
   const addHighlights = useCallback((items: PdfHighlightElement[]) => addElements(items), [addElements])
+  // Stay in Edit text so several lines can be changed in a row.
+  const replaceText = useCallback((element: PdfTextElement) => addElements([element], { keepTool: true }), [addElements])
 
   const fieldTargets = useCallback((sourcePage: PdfDocumentPage) => placementScope === 'all'
     ? pageInfo
@@ -595,6 +598,7 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
               onAddDrawing={addDrawing}
               onAddHighlights={addHighlights}
               onModify={modifyElement}
+              onReplaceText={replaceText}
               placingField={Boolean(placementFieldId)}
             />
           ))}

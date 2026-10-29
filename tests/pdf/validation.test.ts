@@ -17,6 +17,18 @@ describe('PDF editor validation', () => {
     })).toThrow(/page that does not exist/i)
   })
 
+  it('accepts replaced-text covers and rejects malformed ones', () => {
+    const payload = (replaces: unknown) => ({
+      version: 1,
+      pages: [{ pageIndex: 0, width: 612, height: 792, rotation: 0 }],
+      elements: [{ id: 't', type: 'text', pageIndex: 0, zIndex: 0, x: 10, y: 10, width: 80, height: 14, rotation: 0, opacity: 1, text: 'New', fontFamily: 'Helvetica', fontSize: 12, color: '#000000', bold: false, italic: false, underline: false, replaces }],
+    })
+    expect(() => parseEditPayload(payload({ x: 9, y: 8, width: 60, height: 14, text: 'Old', coverColor: '#ffffff' }))).not.toThrow()
+    expect(() => parseEditPayload(payload({ x: 9, y: 8, width: 60, height: 14, text: 'Old', coverColor: 'white' }))).toThrow(/invalid/)
+    expect(() => parseEditPayload(payload({ x: 9, y: 8, width: 0, height: 14, text: 'Old', coverColor: '#ffffff' }))).toThrow(/invalid/)
+    expect(() => parseEditPayload(payload(null))).toThrow(/invalid/)
+  })
+
   it('normalizes unsafe output names', () => {
     expect(safeOutputBaseName('../../Quarter 1/report.pdf')).toBe('report')
   })

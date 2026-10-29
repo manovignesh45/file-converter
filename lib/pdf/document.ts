@@ -26,7 +26,10 @@ export function moveElementBy(element: PdfEditorElement, dx: number, dy: number)
 }
 
 export function cloneElementToPage(element: PdfEditorElement, id: string, pageIndex: number, dx = 12, dy = -12): PdfEditorElement {
-  return { ...moveElementBy(element, dx, dy), id, pageIndex, pageId: sourcePageId(pageIndex) }
+  const cloned = { ...moveElementBy(element, dx, dy), id, pageIndex, pageId: sourcePageId(pageIndex) }
+  // A copy is new text; only the original element covers the text it replaces.
+  if (cloned.type === 'text') delete cloned.replaces
+  return cloned
 }
 
 export function toLegacyExportPayload(document: PdfEditorDocument): PdfEditPayload {
