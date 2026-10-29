@@ -150,7 +150,8 @@ export default function PdfPageSurface({
   useEffect(() => {
     const canvas = backgroundRef.current
     if (!canvas || !renderVisible) return
-    const outputScale = Math.min(window.devicePixelRatio || 1, 2)
+    // Cap the backing store near 16 megapixels (the iOS canvas limit) so high zoom stays renderable.
+    const outputScale = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(16_000_000 / Math.max(1, viewport.width * viewport.height)))
     canvas.width = Math.floor(viewport.width * outputScale)
     canvas.height = Math.floor(viewport.height * outputScale)
     canvas.style.width = `${viewport.width}px`

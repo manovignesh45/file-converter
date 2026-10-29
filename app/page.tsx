@@ -203,10 +203,11 @@ export default function Home() {
 
   return (
     <main className={editorFile ? 'pdf-editor-page' : 'min-h-screen pb-20'}>
-      <Header />
+      {/* The editor has its own header; dropping the site header gives the document the full screen. */}
+      {!editorFile && <Header />}
 
       {editorFile ? (
-        <div className="box-border h-full px-0 pb-0 pt-20 sm:px-4 sm:pb-4 sm:pt-24">
+        <div className="box-border h-full">
           <PdfEditor
             file={editorFile}
             initialPassword={options.pdfPassword}

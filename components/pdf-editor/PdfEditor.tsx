@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api'
-import { ChevronLeft, ChevronRight, Download, FileText, LoaderCircle, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
-import PdfEditorToolbar from './PdfEditorToolbar'
+import { ChevronLeft, ChevronRight, Download, FileText, Keyboard, ListChecks, LoaderCircle, Minus, PanelLeftClose, PanelLeftOpen, Plus, X } from 'lucide-react'
+import PdfEditorToolbar, { editorTools } from './PdfEditorToolbar'
+import KeyboardShortcutsDialog from './KeyboardShortcutsDialog'
 import PdfEditorInspector from './PdfEditorInspector'
 import PdfPageSurface from './PdfPageSurface'
 import PdfThumbnailSidebar from './PdfThumbnailSidebar'
@@ -16,6 +17,7 @@ import { applyPlacedElementEdit, createCommonFields, fieldDisplayValue, isTextua
 import { createFieldPlacements, fitFieldPlacementPoint } from '../../lib/pdf/placement'
 import { clientToPdfPoint, fieldPlacementSize } from '../../lib/pdf/placement'
 import { pdfToViewport } from '../../lib/pdf/coordinates'
+import { anchoredScroll, clampZoom, fitZoom, MAX_ZOOM, MIN_ZOOM, stepZoom, wheelZoom, ZOOM_PRESETS, zoomShortcut, type ZoomAnchor, type ZoomFit } from '../../lib/pdf/zoom'
 import type { PdfFieldDefinition } from '../../types/pdfFields'
 import { deleteLocalSignature, listLocalSignatures, saveLocalSignature } from '../../lib/pdf/signatureRepository'
 import type { SignatureRecord } from '../../lib/pdf/signatures'
@@ -69,24 +71,34 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
   const [signatureInitialUpload, setSignatureInitialUpload] = useState<File | null>(null)
   const [signatureRecords, setSignatureRecords] = useState<Record<string, SignatureRecord>>({})
   const [savedSignatureIds, setSavedSignatureIds] = useState<string[]>([])
+  const [fitMode, setFitMode] = useState<ZoomFit | null>(null)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const [pageDraft, setPageDraft] = useState<string | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const replaceImageInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const assetUrlsRef = useRef<Record<string, string>>({})
   const clipboardRef = useRef<PdfEditorElement | null>(null)
+  const zoomRef = useRef(zoom)
+  zoomRef.current = zoom
+  const activePageRef = useRef(activePage)
+  activePageRef.current = activePage
+  const pendingAnchorRef = useRef<ZoomAnchor | null>(null)
+  const initialFitRef = useRef(false)
+  const cancelPageDraftRef = useRef(false)
 
   const document = history.present
   const elements = document.elements
   const pageInfo = document.pages
   const selectedElement = elements.find(element => element.id === selectedId) || null
   const selectedTextOverflow = selectedElement?.type === 'text' && browserTextLayout(selectedElement).overflow
+  const dirty = history.past.length > 0
   const elementsByPage = useMemo(() => pages.map((_, index) => elements.filter(element => element.pageId ? element.pageId === sourcePageId(index) : element.pageIndex === index)), [elements, pages])
 
   useEffect(() => {
-    if (window.matchMedia('(max-width: 767px)').matches) {
-      setShowThumbnails(false)
-      setShowQuickFill(false)
-    }
+    if (window.matchMedia('(max-width: 767px)').matches) setShowThumbnails(false)
+    // Quick Fill would leave too little room for the page on smaller screens.
+    if (window.matchMedia('(max-width: 1279px)').matches) setShowQuickFill(false)
   }, [])
 
   useEffect(() => {
@@ -126,9 +138,6 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
         if (!cancelled) {
           setPages(loadedPages)
           setHistory(current => ({ ...current, present: { ...current.present, pages: info } }))
-          if (window.matchMedia('(max-width: 767px)').matches && loadedPages[0]) {
-            setZoom(Math.min(1, Math.max(0.5, Math.floor((window.innerWidth - 32) / loadedPages[0].getViewport({ scale: 1 }).width * 10) / 10)))
-          }
           setNeedsPassword(false)
           setLoading(false)
         }
@@ -186,6 +195,153 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     root.querySelectorAll('[data-page-index]').forEach(element => observer.observe(element))
     return () => observer.disconnect()
   }, [pages.length, zoom])
+
+  /** Builds a zoom anchor for a viewport point: the page under it and where it sits on that page. */
+  const anchorAt = useCallback((clientX: number, clientY: number): ZoomAnchor | null => {
+    const root = scrollRef.current
+    if (!root) return null
+    const rootRect = root.getBoundingClientRect()
+    const hit = globalThis.document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('.pdf-page-shell')
+    const shell = hit && root.contains(hit) ? hit : root.querySelector<HTMLElement>(`[data-page-index="${activePageRef.current}"]`)
+    if (!shell) return null
+    const rect = shell.getBoundingClientRect()
+    return {
+      pageIndex: Number(shell.dataset.pageIndex),
+      fractionX: (clientX - rect.left) / rect.width,
+      fractionY: (clientY - rect.top) / rect.height,
+      viewportX: clientX - rootRect.left,
+      viewportY: clientY - rootRect.top,
+    }
+  }, [])
+
+  const centerAnchor = useCallback(() => {
+    const rect = scrollRef.current?.getBoundingClientRect()
+    return rect ? anchorAt(rect.left + rect.width / 2, rect.top + rect.height / 2) : null
+  }, [anchorAt])
+
+  const applyZoom = useCallback((next: number, anchor: ZoomAnchor | null = centerAnchor(), fit: ZoomFit | null = null) => {
+    setFitMode(fit)
+    const clamped = clampZoom(next)
+    if (clamped === zoomRef.current) return
+    pendingAnchorRef.current = anchor
+    setZoom(clamped)
+  }, [centerAnchor])
+
+  const computeFit = useCallback((fit: ZoomFit) => {
+    const root = scrollRef.current
+    const page = pages[activePageRef.current] ?? pages[0]
+    if (!root || !page) return null
+    const style = getComputedStyle(root)
+    return fitZoom(fit, page.getViewport({ scale: 1 }), { width: root.clientWidth, height: root.clientHeight }, { x: parseFloat(style.paddingLeft) || 0, y: parseFloat(style.paddingTop) || 0 })
+  }, [pages])
+
+  const fitTo = useCallback((fit: ZoomFit) => {
+    const next = computeFit(fit)
+    const root = scrollRef.current
+    if (next === null || !root) return
+    // Fitting shows the current page from its top edge.
+    const anchor = { pageIndex: activePageRef.current, fractionX: 0.5, fractionY: 0, viewportX: root.clientWidth / 2, viewportY: parseFloat(getComputedStyle(root).paddingTop) || 0 }
+    applyZoom(next, anchor, fit)
+  }, [applyZoom, computeFit])
+
+  // Open long or wide documents at a size that fits the screen, but never enlarge them.
+  useEffect(() => {
+    if (initialFitRef.current || !pages.length) return
+    initialFitRef.current = true
+    const fitted = computeFit('width')
+    if (fitted !== null) setZoom(Math.min(1, fitted))
+  }, [computeFit, pages.length])
+
+  // Keep the anchored point under the pointer once the pages have their new size.
+  useLayoutEffect(() => {
+    const anchor = pendingAnchorRef.current
+    pendingAnchorRef.current = null
+    const root = scrollRef.current
+    const shell = anchor && root?.querySelector<HTMLElement>(`[data-page-index="${anchor.pageIndex}"]`)
+    if (!anchor || !root || !shell) return
+    const rootRect = root.getBoundingClientRect()
+    const rect = shell.getBoundingClientRect()
+    const { left, top } = anchoredScroll({ left: rect.left - rootRect.left + root.scrollLeft, top: rect.top - rootRect.top + root.scrollTop, width: rect.width, height: rect.height }, anchor)
+    root.scrollTo({ left, top, behavior: 'instant' as ScrollBehavior })
+  }, [zoom])
+
+  useEffect(() => {
+    const root = scrollRef.current
+    if (!root || !fitMode) return
+    const observer = new ResizeObserver(() => {
+      const next = computeFit(fitMode)
+      if (next !== null && next !== zoomRef.current) applyZoom(next, centerAnchor(), fitMode)
+    })
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [applyZoom, centerAnchor, computeFit, fitMode])
+
+  // Ctrl/Cmd+wheel, trackpad pinch, Safari gestures and two-finger touch zoom the
+  // document instead of the browser. Rendering is costly, so changes are batched.
+  useEffect(() => {
+    const root = scrollRef.current
+    if (!root || !pages.length) return
+    let pending: number | null = null
+    let pendingAnchor: ZoomAnchor | null = null
+    let timer: number | undefined
+    const schedule = (next: number, anchor: ZoomAnchor | null) => {
+      pending = next
+      pendingAnchor = anchor
+      timer ??= window.setTimeout(() => {
+        timer = undefined
+        if (pending !== null) applyZoom(pending, pendingAnchor)
+        pending = null
+      }, 100)
+    }
+    const onWheel = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return
+      event.preventDefault()
+      schedule(wheelZoom(pending ?? zoomRef.current, event.deltaY, event.deltaMode), anchorAt(event.clientX, event.clientY))
+    }
+    let gestureStart = 1
+    const onGestureStart = (event: Event) => { event.preventDefault(); gestureStart = zoomRef.current }
+    const onGestureChange = (event: Event) => {
+      event.preventDefault()
+      const gesture = event as Event & { scale: number; clientX: number; clientY: number }
+      schedule(clampZoom(gestureStart * gesture.scale), anchorAt(gesture.clientX, gesture.clientY))
+    }
+    let pinch: { distance: number; zoom: number } | null = null
+    const distance = (touches: TouchList) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)
+    const onTouchStart = (event: TouchEvent) => { if (event.touches.length === 2) pinch = { distance: distance(event.touches), zoom: zoomRef.current } }
+    const onTouchMove = (event: TouchEvent) => {
+      if (!pinch || event.touches.length !== 2) return
+      event.preventDefault()
+      const [first, second] = [event.touches[0], event.touches[1]]
+      schedule(clampZoom(pinch.zoom * distance(event.touches) / Math.max(1, pinch.distance)), anchorAt((first.clientX + second.clientX) / 2, (first.clientY + second.clientY) / 2))
+    }
+    const onTouchEnd = (event: TouchEvent) => { if (event.touches.length < 2) pinch = null }
+    window.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('gesturestart', onGestureStart)
+    window.addEventListener('gesturechange', onGestureChange)
+    root.addEventListener('touchstart', onTouchStart, { passive: true, capture: true })
+    root.addEventListener('touchmove', onTouchMove, { passive: false, capture: true })
+    root.addEventListener('touchend', onTouchEnd, { capture: true })
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('gesturestart', onGestureStart)
+      window.removeEventListener('gesturechange', onGestureChange)
+      root.removeEventListener('touchstart', onTouchStart, { capture: true })
+      root.removeEventListener('touchmove', onTouchMove, { capture: true })
+      root.removeEventListener('touchend', onTouchEnd, { capture: true })
+    }
+  }, [anchorAt, applyZoom, pages.length])
+
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
+  const closeEditor = () => {
+    if (!dirty || window.confirm('Close the editor? Your changes have not been exported and will be lost.')) onCancel()
+  }
 
   const commit = useCallback((next: PdfEditorElement[]) => {
     setHistory(current => commitHistory(current, { ...current.present, elements: next }))
@@ -416,12 +572,29 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Browser zoom would scale the whole editor UI; zoom the document instead.
+      const zoomAction = zoomShortcut(event)
+      if (zoomAction) {
+        event.preventDefault()
+        applyZoom(zoomAction === 'reset' ? 1 : stepZoom(zoomRef.current, zoomAction === 'in' ? 1 : -1))
+        return
+      }
       const target = event.target as HTMLElement
       const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
-      if (event.isComposing || isTyping) return
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+      if (event.isComposing || isTyping || showShortcuts) return
+      const toolShortcut = !event.ctrlKey && !event.metaKey && !event.altKey && event.key.length === 1
+        ? editorTools.find(item => item.shortcut === event.key.toUpperCase())
+        : undefined
+      if (event.key === '?') {
         event.preventDefault()
-        setHistory(current => event.shiftKey ? redoHistory(current) : undoHistory(current))
+        setShowShortcuts(true)
+      } else if (toolShortcut && !event.shiftKey) {
+        event.preventDefault()
+        if (toolShortcut.value === 'image') imageInputRef.current?.click()
+        else { setTool(toolShortcut.value); setPlacementFieldId(null) }
+      } else if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === 'z' || event.key.toLowerCase() === 'y')) {
+        event.preventDefault()
+        setHistory(current => event.shiftKey || event.key.toLowerCase() === 'y' ? redoHistory(current) : undoHistory(current))
         setSelectedId(null)
       } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && selectedElement) {
         if (window.getSelection()?.toString()) return
@@ -450,7 +623,7 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activePage, addElements, deleteSelected, duplicateSelected, modifyElement, selectedElement])
+  }, [activePage, addElements, applyZoom, deleteSelected, duplicateSelected, modifyElement, selectedElement, showShortcuts])
 
   const chooseImage = async (chosen: File | undefined, replace = false) => {
     if (!chosen) return
@@ -495,6 +668,15 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
     scrollRef.current?.querySelector(`[data-page-index="${next}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     setActivePage(next)
   }
+
+  const commitPageDraft = () => {
+    const pageNumber = Number(pageDraft)
+    if (!cancelPageDraftRef.current && pageDraft && Number.isInteger(pageNumber)) goToPage(pageNumber - 1)
+    cancelPageDraftRef.current = false
+    setPageDraft(null)
+  }
+
+  const closeShortcuts = useCallback(() => setShowShortcuts(false), [])
 
   const exportPdf = async () => {
     setExporting(true)
@@ -551,16 +733,14 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
   return (
     <div className="pdf-editor-frame">
       <header className="pdf-editor-header">
-        <button className="pdf-icon-button" onClick={onCancel} title="Close editor"><X /></button>
-        <div className="pdf-editor-document"><input key={document.id} className="w-full truncate rounded border border-transparent bg-transparent text-base font-bold text-gray-900 hover:border-gray-200 focus:border-primary-500 focus:outline-none" aria-label="Document name" defaultValue={document.name} onBlur={event => { const name = event.target.value.trim(); if (name && name !== document.name) setHistory(current => commitHistory(current, { ...current.present, name })) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /><p className="pdf-editor-session-note text-xs text-gray-500">Session only · export sends the PDF to the server</p></div>
-        <div className="pdf-editor-page-nav">
-          <button className="pdf-icon-button" onClick={() => goToPage(activePage - 1)} disabled={activePage === 0}><ChevronLeft /></button>
-          <span className="min-w-20 text-center text-sm font-semibold">{activePage + 1} / {pages.length}</span>
-          <button className="pdf-icon-button" onClick={() => goToPage(activePage + 1)} disabled={activePage === pages.length - 1}><ChevronRight /></button>
-        </div>
-        <button className="pdf-editor-export btn-primary px-4" onClick={exportPdf} disabled={exporting}>
-          {exporting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-          {exporting ? 'Exporting…' : 'Export PDF'}
+        <button className="pdf-icon-button" onClick={closeEditor} title="Close editor" aria-label="Close editor"><X /></button>
+        <button className="pdf-icon-button" onClick={() => setShowThumbnails(value => !value)} aria-pressed={showThumbnails} aria-label={showThumbnails ? 'Hide page thumbnails' : 'Show page thumbnails'} title={showThumbnails ? 'Hide page thumbnails' : 'Show page thumbnails'}>{showThumbnails ? <PanelLeftClose /> : <PanelLeftOpen />}</button>
+        <div className="pdf-editor-document"><input key={document.id} className="w-full truncate rounded border border-transparent bg-transparent px-1 text-base font-bold text-gray-900 hover:border-gray-200 focus:border-primary-500 focus:outline-none" aria-label="Document name" defaultValue={document.name} onBlur={event => { const name = event.target.value.trim(); if (name && name !== document.name) setHistory(current => commitHistory(current, { ...current.present, name })) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /><p className="pdf-editor-session-note px-1 text-xs text-gray-500">Session only · export sends the PDF to the server</p></div>
+        <button className="pdf-icon-button pdf-shortcuts-button" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><Keyboard /></button>
+        <button className={`pdf-header-toggle ${showQuickFill ? 'active' : ''}`} aria-pressed={showQuickFill} aria-controls="pdf-quick-fill" onClick={() => { setShowQuickFill(value => !value); setPlacementFieldId(null) }} title="Quick Fill: reusable names, dates and signatures"><ListChecks /><span>Quick Fill</span></button>
+        <button className="pdf-editor-export btn-primary" onClick={exportPdf} disabled={exporting}>
+          {exporting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          <span>{exporting ? 'Exporting…' : 'Export PDF'}</span>
         </button>
       </header>
 
@@ -568,17 +748,15 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
 
       <div className="pdf-editor-toolbar-wrap"><PdfEditorToolbar
         tool={tool} onToolChange={next => { setTool(next); setPlacementFieldId(null) }} onImageRequest={() => imageInputRef.current?.click()} onReplaceImage={() => replaceImageInputRef.current?.click()}
-        zoom={zoom} onZoomChange={setZoom}
         onUndo={() => { setHistory(current => undoHistory(current)); setSelectedId(null) }}
         onRedo={() => { setHistory(current => redoHistory(current)); setSelectedId(null) }}
         canUndo={history.past.length > 0} canRedo={history.future.length > 0}
-        onDelete={deleteSelected} onDuplicate={duplicateSelected} onReorder={reorderSelected}
+        onDelete={deleteSelected} onDuplicate={duplicateSelected}
         selectedElement={selectedElement} onElementChange={modifyElement} onAdvanced={() => setShowAdvanced(value => !value)} advancedOpen={showAdvanced}
-        quickFillOpen={showQuickFill} onQuickFillToggle={() => { setShowQuickFill(value => !value); setPlacementFieldId(null) }}
         drawColor={drawColor} drawWidth={drawWidth} highlightColor={highlightColor}
         onDefaultsChange={values => { if (values.drawColor) setDrawColor(values.drawColor); if (values.drawWidth !== undefined) setDrawWidth(values.drawWidth); if (values.highlightColor) setHighlightColor(values.highlightColor) }}
       />
-      {showAdvanced && <PdfEditorInspector element={selectedElement} onChange={modifyElement} onClose={() => setShowAdvanced(false)} />}
+      {showAdvanced && <PdfEditorInspector element={selectedElement} onChange={modifyElement} onReorder={reorderSelected} onClose={() => setShowAdvanced(false)} />}
       </div>
 
       <input ref={imageInputRef} className="hidden" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={event => { void chooseImage(event.target.files?.[0]); event.target.value = '' }} />
@@ -586,7 +764,6 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
 
       <div className="pdf-editor-body">
         {showThumbnails && <PdfThumbnailSidebar pages={pages} activePage={activePage} onSelect={goToPage} />}
-        <button className="pdf-sidebar-toggle" onClick={() => setShowThumbnails(value => !value)} aria-label={showThumbnails ? 'Hide page thumbnails' : 'Show page thumbnails'} title={showThumbnails ? 'Hide page thumbnails' : 'Show page thumbnails'}>{showThumbnails ? <PanelLeftClose /> : <PanelLeftOpen />}</button>
         <div ref={scrollRef} className="pdf-editor-pages">
           {pages.map((page, pageIndex) => (
             <PdfPageSurface
@@ -618,7 +795,26 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
           signatureUrls={assetUrls} savedSignatureIds={savedSignatureIds}
         />}
       </div>
-      <footer className="pdf-editor-status"><span>Page {activePage + 1} of {pages.length}</span><span>Zoom {Math.round(zoom * 100)}%</span><span>{selectedTextOverflow ? 'Selected text exceeds its box' : 'Unsaved session'}</span></footer>
+      <footer className="pdf-editor-status">
+        <div className="pdf-status-group" role="group" aria-label="Page navigation">
+          <button className="pdf-status-button" onClick={() => goToPage(activePage - 1)} disabled={activePage === 0} aria-label="Previous page" title="Previous page"><ChevronLeft /></button>
+          <input className="pdf-page-input" inputMode="numeric" aria-label={`Page number, 1 to ${pages.length}`} value={pageDraft ?? String(activePage + 1)} onFocus={event => event.target.select()} onChange={event => setPageDraft(event.target.value.replace(/\D/g, ''))} onBlur={commitPageDraft} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); else if (event.key === 'Escape') { cancelPageDraftRef.current = true; event.currentTarget.blur() } }} />
+          <span className="whitespace-nowrap">of {pages.length}</span>
+          <button className="pdf-status-button" onClick={() => goToPage(activePage + 1)} disabled={activePage === pages.length - 1} aria-label="Next page" title="Next page"><ChevronRight /></button>
+        </div>
+        <span className={`pdf-status-message ${selectedTextOverflow ? 'text-amber-700' : ''}`} role="status">{selectedTextOverflow ? 'Selected text exceeds its box' : dirty ? 'Unsaved changes' : 'No changes yet'}</span>
+        <div className="pdf-status-group" role="group" aria-label="Zoom">
+          <button className="pdf-status-button" onClick={() => applyZoom(stepZoom(zoom, -1))} disabled={zoom <= MIN_ZOOM} aria-label="Zoom out" title="Zoom out (Ctrl −)"><Minus /></button>
+          <select className="pdf-zoom-select" aria-label="Zoom level" value={fitMode ?? String(zoom)} onChange={event => { const value = event.target.value; if (value === 'width' || value === 'page') fitTo(value); else applyZoom(Number(value)) }}>
+            <option value="width">{fitMode === 'width' ? `Fit width (${Math.round(zoom * 100)}%)` : 'Fit width'}</option>
+            <option value="page">{fitMode === 'page' ? `Fit page (${Math.round(zoom * 100)}%)` : 'Fit page'}</option>
+            {!fitMode && !ZOOM_PRESETS.includes(zoom) && <option value={String(zoom)}>{Math.round(zoom * 100)}%</option>}
+            {ZOOM_PRESETS.map(preset => <option key={preset} value={String(preset)}>{preset * 100}%</option>)}
+          </select>
+          <button className="pdf-status-button" onClick={() => applyZoom(stepZoom(zoom, 1))} disabled={zoom >= MAX_ZOOM} aria-label="Zoom in" title="Zoom in (Ctrl +)"><Plus /></button>
+        </div>
+      </footer>
+      {showShortcuts && <KeyboardShortcutsDialog onClose={closeShortcuts} />}
       {signatureDialogOpen && <SignatureDialog initialUpload={signatureInitialUpload} onClose={() => { setSignatureDialogOpen(false); setSignatureInitialUpload(null) }} onSave={addSignature} />}
     </div>
   )

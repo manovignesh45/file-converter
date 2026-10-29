@@ -1,15 +1,17 @@
 'use client'
 
+import { MoveDown, MoveUp } from 'lucide-react'
 import type { PdfEditorElement } from '../../types/pdfEditor'
 import { browserTextLayout } from '../../lib/pdf/browserTextLayout'
 
 interface Props {
   element: PdfEditorElement | null
   onChange: (element: PdfEditorElement) => void
+  onReorder: (direction: 'forward' | 'backward') => void
   onClose: () => void
 }
 
-export default function PdfEditorInspector({ element, onChange, onClose }: Props) {
+export default function PdfEditorInspector({ element, onChange, onReorder, onClose }: Props) {
   const update = (changes: Partial<PdfEditorElement>) => {
     if (element) onChange({ ...element, ...changes } as PdfEditorElement)
   }
@@ -31,6 +33,8 @@ export default function PdfEditorInspector({ element, onChange, onClose }: Props
       {element.type === 'image' && element.fieldId && <div className="rounded-lg bg-primary-50 p-2 text-xs text-primary-800">{element.fieldLink === 'linked' ? 'Linked to Quick Fill image' : 'Independent image'}{element.fieldLink === 'linked' && <button className="ml-2 font-bold underline" onClick={() => update({ fieldLink: 'independent' })}>Detach</button>}</div>}
       {(element.type === 'rectangle' || element.type === 'ellipse') && <label className="pdf-property-label"><input type="checkbox" checked={element.fillColor !== null} onChange={event => update({ fillColor: event.target.checked ? '#ffffff' : null })} />Use fill</label>}
       <div className="grid grid-cols-2 gap-2"><label className="pdf-property-field">Width<input type="number" min="1" value={Math.round(element.width)} onChange={event => update({ width: Math.max(1, Number(event.target.value)) })} /></label><label className="pdf-property-field">Height<input type="number" min="1" value={Math.round(element.height)} onChange={event => update({ height: Math.max(1, Number(event.target.value)) })} /></label></div>
+      <label className="pdf-property-field">Opacity <span className="font-normal text-gray-500">{Math.round(element.opacity * 100)}%</span><input type="range" min="0.05" max="1" step="0.05" value={element.opacity} onChange={event => update({ opacity: Number(event.target.value) })} /></label>
+      <div className="grid grid-cols-2 gap-2"><button className="pdf-style-toggle inline-flex items-center justify-center gap-1.5" onClick={() => onReorder('backward')}><MoveDown className="h-4 w-4" />Send backward</button><button className="pdf-style-toggle inline-flex items-center justify-center gap-1.5" onClick={() => onReorder('forward')}><MoveUp className="h-4 w-4" />Bring forward</button></div>
       {element.type !== 'drawing' && element.type !== 'highlight' && <label className="pdf-property-field">Rotation<input type="number" min="-360" max="360" value={Math.round(element.rotation)} onChange={event => update({ rotation: Number(event.target.value) })} /></label>}
     </div>}
   </div>
