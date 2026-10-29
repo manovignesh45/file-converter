@@ -107,6 +107,8 @@
 .pdf-editor-advanced { @apply absolute right-3 top-full z-50 mt-2 max-h-[min(70vh,36rem)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-gray-200 bg-white p-4 text-sm shadow-xl; }
 .pdf-editor-advanced .pdf-property-field { @apply text-sm; }
 
+.pdf-editor-actions { display: contents; }
+
 .pdf-editor-tools, .pdf-editor-context {
   @apply flex min-w-0 flex-wrap items-center gap-1;
 }
@@ -205,6 +207,7 @@
 .pdf-inline-font-controls { @apply absolute z-30 flex h-8 items-center gap-1 rounded-lg border border-primary-300 bg-white px-1 text-xs font-semibold text-gray-800 shadow-md; }
 .pdf-inline-font-controls button { @apply flex h-6 w-6 items-center justify-center rounded text-base hover:bg-primary-50 disabled:opacity-40; }
 .pdf-inline-font-controls span { @apply min-w-5 text-center; }
+.pdf-inline-font-controls svg { @apply h-4 w-4; }
 .pdf-field-card.active { @apply border-primary-500 bg-primary-50; }
 .pdf-page-shell.is-placing .upper-canvas { cursor: crosshair !important; }
 .pdf-signature-backdrop { @apply fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4; }
@@ -236,6 +239,8 @@
 .pdf-editor-text-layer.is-selecting {
   pointer-events: auto;
   cursor: text;
+  /* A touch drag marks the highlight area instead of scrolling. */
+  touch-action: none;
 }
 
 .pdf-page-shell .canvas-container {
@@ -317,25 +322,35 @@ textarea.pdf-inline-text-editor {
 }
 
 @media (max-width: 767px) {
-  .pdf-editor-frame { border-radius: 0; border-left: 0; border-right: 0; }
-  .pdf-editor-header { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) auto; min-height: 0; gap: .25rem .5rem; padding: .5rem .75rem; }
-  .pdf-editor-document { width: 100%; }
+  .pdf-editor-page > header { display: none; }
+  .pdf-editor-frame { border: 0; border-radius: 0; }
+  .pdf-editor-header { min-height: 0; gap: .25rem; padding: .375rem .5rem; padding-top: max(.375rem, env(safe-area-inset-top)); }
   .pdf-editor-session-note { display: none; }
-  .pdf-editor-page-nav { grid-column: 1 / -1; grid-row: 2; justify-content: center; }
-  .pdf-editor-export { grid-column: 3; grid-row: 1; min-height: 2.25rem; padding: .35rem .65rem; font-size: .75rem; }
+  .pdf-editor-export { min-height: 2.25rem; padding: .35rem .75rem; font-size: .8rem; }
   .pdf-editor-export svg { margin-right: .3rem; }
   .pdf-thumbnail-sidebar { position: absolute; top: 0; left: 0; bottom: 0; z-index: 30; width: min(11rem, 70vw); box-shadow: 8px 0 20px rgba(15, 23, 42, 0.14); }
-  .pdf-fill-panel, .pdf-fill-panel[data-thumbnails='open'] { position: absolute; top: auto; right: 0; bottom: 0; left: 0; z-index: 30; width: 100% !important; max-width: 100%; height: min(74%, 32rem); border-top: 1px solid #cbd5e1; border-left: 0; border-radius: 1rem 1rem 0 0; padding: 1rem; box-shadow: 0 -8px 24px rgba(15, 23, 42, .16); }
+  .pdf-fill-panel, .pdf-fill-panel[data-thumbnails='open'] { position: absolute; top: auto; right: 0; bottom: 0; left: 0; z-index: 30; width: 100% !important; max-width: 100%; height: min(74%, 32rem); border-top: 1px solid #cbd5e1; border-left: 0; border-radius: 1rem 1rem 0 0; padding: 1rem; padding-bottom: max(1rem, env(safe-area-inset-bottom)); box-shadow: 0 -8px 24px rgba(15, 23, 42, .16); }
   .pdf-fill-resize-handle { display: none; }
   .pdf-fill-close { display: inline-flex; }
-  .pdf-editor-toolbar { max-height: none; gap: .25rem; padding: .25rem .5rem; }
-  .pdf-editor-tools, .pdf-editor-context { flex: 0 0 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .pdf-editor-tools::-webkit-scrollbar, .pdf-editor-context::-webkit-scrollbar { display: none; }
+  .pdf-editor-toolbar { min-height: 0; flex-wrap: wrap; gap: .25rem; padding: .25rem .5rem; }
+  .pdf-editor-tools, .pdf-editor-actions { display: flex; flex: 0 0 100%; flex-wrap: nowrap; align-items: center; gap: .25rem; overflow-x: auto; scrollbar-width: none; }
+  .pdf-editor-tools::-webkit-scrollbar, .pdf-editor-actions::-webkit-scrollbar { display: none; }
+  /* Undo, zoom and Quick Fill stay in view; selection formatting scrolls after them. */
+  .pdf-editor-commandbar { order: -1; width: auto; flex: none; }
+  .pdf-editor-context { flex: none; flex-wrap: nowrap; }
   .pdf-editor-context > * { flex: none; }
-  .pdf-editor-commandbar { width: 100%; justify-content: space-between; }
+  .pdf-toolbar-hint { white-space: nowrap; }
   .pdf-tool-button { flex: none; min-width: 3.25rem; }
-  .pdf-editor-pages { gap: 1rem; padding: 1rem .5rem 1.5rem; }
-  .pdf-editor-status { padding: 0 .5rem; font-size: .65rem; }
+  .pdf-editor-pages { gap: 1rem; padding: 1rem .5rem 1.5rem; padding-bottom: max(1.5rem, env(safe-area-inset-bottom)); }
+  .pdf-editor-status { display: none; }
+  .pdf-signature-backdrop { align-items: flex-end; padding: 0; }
+  .pdf-signature-dialog { max-height: 92dvh; border-radius: 1rem 1rem 0 0; padding: 1.25rem 1rem max(1.25rem, env(safe-area-inset-bottom)); }
+}
+
+/* Finger-sized targets for the small on-page controls. */
+@media (pointer: coarse) {
+  .pdf-inline-font-controls { height: 2.5rem; }
+  .pdf-inline-font-controls button { height: 2rem; width: 2rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

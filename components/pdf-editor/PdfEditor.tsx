@@ -551,16 +551,16 @@ export default function PdfEditor({ file, initialPassword = '', onCancel, onExpo
   return (
     <div className="pdf-editor-frame">
       <header className="pdf-editor-header">
-        <button className="pdf-icon-button" onClick={onCancel} title="Close editor"><X /></button>
+        <button className="pdf-icon-button" onClick={onCancel} title="Close editor" aria-label="Close editor"><X /></button>
         <div className="pdf-editor-document"><input key={document.id} className="w-full truncate rounded border border-transparent bg-transparent text-base font-bold text-gray-900 hover:border-gray-200 focus:border-primary-500 focus:outline-none" aria-label="Document name" defaultValue={document.name} onBlur={event => { const name = event.target.value.trim(); if (name && name !== document.name) setHistory(current => commitHistory(current, { ...current.present, name })) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /><p className="pdf-editor-session-note text-xs text-gray-500">Session only · export sends the PDF to the server</p></div>
         <div className="pdf-editor-page-nav">
-          <button className="pdf-icon-button" onClick={() => goToPage(activePage - 1)} disabled={activePage === 0}><ChevronLeft /></button>
-          <span className="min-w-20 text-center text-sm font-semibold">{activePage + 1} / {pages.length}</span>
-          <button className="pdf-icon-button" onClick={() => goToPage(activePage + 1)} disabled={activePage === pages.length - 1}><ChevronRight /></button>
+          <button className="pdf-icon-button" onClick={() => goToPage(activePage - 1)} disabled={activePage === 0} aria-label="Previous page"><ChevronLeft /></button>
+          <span className="min-w-12 text-center text-sm font-semibold md:min-w-20">{activePage + 1} / {pages.length}</span>
+          <button className="pdf-icon-button" onClick={() => goToPage(activePage + 1)} disabled={activePage === pages.length - 1} aria-label="Next page"><ChevronRight /></button>
         </div>
         <button className="pdf-editor-export btn-primary px-4" onClick={exportPdf} disabled={exporting}>
           {exporting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-          {exporting ? 'Exporting…' : 'Export PDF'}
+          {exporting ? 'Exporting…' : <>Export<span className="ml-1 max-md:hidden">PDF</span></>}
         </button>
       </header>
 

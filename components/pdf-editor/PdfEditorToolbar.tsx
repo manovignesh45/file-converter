@@ -54,9 +54,10 @@ export default function PdfEditorToolbar({ tool, onToolChange, onImageRequest, o
           <button key={value} className={`pdf-tool-button ${tool === value ? 'active' : ''}`} onClick={() => value === 'image' ? onImageRequest() : onToolChange(value)} aria-pressed={tool === value} title={label} aria-label={label}><Icon /><span>{label}</span></button>
         ))}
       </div>
+      <div className="pdf-editor-actions">
       <div className="pdf-editor-context" aria-label="Selected object formatting">
         {tool === 'draw' && <><label className="pdf-toolbar-color">Draw color <input aria-label="Drawing color" type="color" value={drawColor} onChange={event => onDefaultsChange({ drawColor: event.target.value })} /></label><label className="pdf-toolbar-color">Width <input aria-label="Drawing width" className="pdf-toolbar-number" type="number" min="1" max="20" value={drawWidth} onChange={event => onDefaultsChange({ drawWidth: Number(event.target.value) })} /></label></>}
-        {tool === 'editText' && !selectedElement && <span className="pdf-toolbar-hint">Click any line of PDF text to change it. Press Enter to apply, Esc to cancel.</span>}
+        {tool === 'editText' && !selectedElement && <span className="pdf-toolbar-hint">Tap or click any line of PDF text to change it. Press Enter to apply, Esc to cancel.</span>}
         {tool === 'highlight' && <label className="pdf-toolbar-color">Highlight color <input aria-label="Highlight color" type="color" value={highlightColor} onChange={event => onDefaultsChange({ highlightColor: event.target.value })} /></label>}
         {selectedElement?.type === 'text' && <>
           <select aria-label="Font family" value={selectedElement.fontFamily} onChange={event => update({ fontFamily: event.target.value as PdfFontFamily })}><option value="Helvetica">Helvetica</option><option value="TimesRoman">Times</option><option value="Courier">Courier</option><option value="NotoSans">Noto Sans</option></select>
@@ -85,6 +86,7 @@ export default function PdfEditorToolbar({ tool, onToolChange, onImageRequest, o
         <button className="pdf-icon-button" onClick={() => onZoomChange(Math.max(0.5, zoom - 0.1))} title="Zoom out" aria-label="Zoom out"><ZoomOut /></button>
         <span className="min-w-12 text-center text-sm">{Math.round(zoom * 100)}%</span>
         <button className="pdf-icon-button" onClick={() => onZoomChange(Math.min(2.5, zoom + 0.1))} title="Zoom in" aria-label="Zoom in"><ZoomIn /></button>
+      </div>
       </div>
     </div>
   )
