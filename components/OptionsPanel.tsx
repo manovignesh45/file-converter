@@ -379,6 +379,67 @@ export default function OptionsPanel({ options, onOptionsChange, onProcess, canP
               </div>
             )}
 
+            {/* PDF TO WORD */}
+            {options.operation === 'pdf-to-word' && (
+              <div className="bg-white/60 rounded-xl p-4 border border-gray-100 space-y-2 text-sm text-gray-600">
+                <p>Text, headings, bold and italic styling are kept as editable Word text. Each PDF page starts a new page in the document.</p>
+                <p className="text-xs text-gray-500">Scanned PDFs have no selectable text and cannot be converted.</p>
+              </div>
+            )}
+
+            {/* PDF MERGE */}
+            {options.operation === 'pdf-merge' && (
+              <div className="bg-white/60 rounded-xl p-4 border border-gray-100 text-sm text-gray-600">
+                {images.length < 2
+                  ? 'Add at least two PDFs to merge.'
+                  : `${images.length} PDFs will be combined in the order shown. Drag the files to change it.`}
+              </div>
+            )}
+
+            {/* PDF SPLIT / ROTATE */}
+            {(options.operation === 'pdf-split' || options.operation === 'pdf-rotate') && (
+              <div className="bg-white/60 rounded-xl p-4 border border-gray-100 space-y-4">
+                {options.operation === 'pdf-rotate' && (
+                  <div>
+                    <label className="label-text">Rotate clockwise</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([90, 180, 270] as const).map(angle => (
+                        <button
+                          key={angle}
+                          type="button"
+                          onClick={() => updateOption('pdfRotation', angle)}
+                          aria-pressed={(options.pdfRotation || 90) === angle}
+                          className={`px-3 py-2 text-sm font-medium rounded-lg border transition-all ${
+                            (options.pdfRotation || 90) === angle
+                              ? 'bg-primary-600 text-white border-primary-600 shadow-lg shadow-primary-500/30'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          {angle}°
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <label htmlFor="pdfPageRanges" className="label-text">Pages</label>
+                  <input
+                    id="pdfPageRanges"
+                    type="text"
+                    value={options.pdfPageRanges || ''}
+                    onChange={(e) => updateOption('pdfPageRanges', e.target.value)}
+                    className="input-field"
+                    placeholder={options.operation === 'pdf-split' ? 'Every page' : 'All pages'}
+                  />
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    {options.operation === 'pdf-split'
+                      ? 'Leave empty to save each page separately, or enter ranges like 1-3, 4-6 to get one PDF per range.'
+                      : 'Leave empty to rotate every page, or enter pages like 1, 3-5.'}
+                  </p>
+                </div>
+              </div>
+            )}
+
           </div>
 
           <div className="mt-8">
@@ -391,7 +452,14 @@ export default function OptionsPanel({ options, onOptionsChange, onProcess, canP
                   : 'bg-gray-300 cursor-not-allowed'
               }`}
             >
-              {options.operation === 'pdf-remove-password' ? 'Unlock PDF' : options.operation === 'pdf-edit' ? 'Open Editor' : 'Start Processing'}
+              {({
+                'pdf-remove-password': 'Unlock PDF',
+                'pdf-edit': 'Open Editor',
+                'pdf-to-word': 'Convert to Word',
+                'pdf-merge': 'Merge PDFs',
+                'pdf-split': 'Split PDF',
+                'pdf-rotate': 'Rotate PDF',
+              } as Partial<Record<ConversionOptions['operation'], string>>)[options.operation] ?? 'Start Processing'}
             </button>
           </div>
         </>

@@ -5,6 +5,8 @@ import { ImageToPdfService } from '../../../services/imageToPdfService'
 import { FormatConversionService } from '../../../services/formatConversionService'
 import { PdfCompressionService } from '../../../services/pdfCompressionService'
 import { PdfPasswordService } from '../../../services/pdfPasswordService'
+import { PdfToWordService } from '../../../services/pdfToWordService'
+import { PdfPageService } from '../../../services/pdfPageService'
 import { hasPdfSignature, MAX_PDF_BYTES } from '../../../lib/pdf/validation'
 
 export async function POST(request: NextRequest) {
@@ -231,6 +233,67 @@ async function processFiles(files: File[], options: any) {
         const result = await pdfPasswordService.removePassword(buffer, file.name, {
           password: options.pdfPassword,
         })
+        outputFiles.push({
+          fileName: result.processedName,
+          originalSize: result.originalSize,
+          processedSize: result.processedSize,
+          pageCount: result.pageCount,
+        })
+      }
+      break
+
+    case 'pdf-to-word':
+      const pdfToWordService = new PdfToWordService()
+
+      for (const file of files) {
+        const buffer = Buffer.from(await file.arrayBuffer())
+        const result = await pdfToWordService.convertToWord(buffer, file.name, {
+          password: options.pdfPassword,
+        })
+        outputFiles.push({
+          fileName: result.processedName,
+          originalSize: result.originalSize,
+          processedSize: result.processedSize,
+          format: 'DOCX',
+          pageCount: result.pageCount,
+        })
+      }
+      break
+
+    case 'pdf-merge':
+      const mergeResult = await new PdfPageService().merge(
+        await Promise.all(files.map(async file => ({ buffer: Buffer.from(await file.arrayBuffer()), name: file.name })))
+      )
+      outputFiles.push({
+        fileName: mergeResult.processedName,
+        originalSize: mergeResult.originalSize,
+        processedSize: mergeResult.processedSize,
+        pageCount: mergeResult.pageCount,
+      })
+      break
+
+    case 'pdf-split':
+      const splitService = new PdfPageService()
+
+      for (const file of files) {
+        const buffer = Buffer.from(await file.arrayBuffer())
+        const parts = await splitService.split(buffer, file.name, options.pdfPageRanges)
+        for (const part of parts) {
+          outputFiles.push({
+            fileName: part.processedName,
+            processedSize: part.processedSize,
+            pageCount: part.pageCount,
+          })
+        }
+      }
+      break
+
+    case 'pdf-rotate':
+      const rotateService = new PdfPageService()
+
+      for (const file of files) {
+        const buffer = Buffer.from(await file.arrayBuffer())
+        const result = await rotateService.rotate(buffer, file.name, Number(options.pdfRotation) || 90, options.pdfPageRanges)
         outputFiles.push({
           fileName: result.processedName,
           originalSize: result.originalSize,

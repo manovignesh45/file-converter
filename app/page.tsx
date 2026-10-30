@@ -45,6 +45,10 @@ export default function Home() {
       'pdf-edit': 'pdf-edit',
       'pdf-compress': 'pdf-compress',
       'pdf-unlock': 'pdf-remove-password',
+      'pdf-to-word': 'pdf-to-word',
+      'pdf-merge': 'pdf-merge',
+      'pdf-split': 'pdf-split',
+      'pdf-rotate': 'pdf-rotate',
     }
     setSelectedTool(tool)
     setOptions(previous => ({
@@ -52,6 +56,7 @@ export default function Home() {
       operation: operations[tool],
       ...(tool === 'images-to-pdf' ? { outputFormat: 'pdf' as const } : {}),
       ...(tool === 'image-convert' ? { outputFormat: 'jpg' as const } : {}),
+      ...(tool === 'pdf-rotate' ? { pdfRotation: previous.pdfRotation || 90 } : {}),
       ...(tool === 'image-watermark' ? {
         watermarkText: previous.watermarkText || 'Sample Watermark',
         watermarkPosition: previous.watermarkPosition || 'bottom-right',
@@ -89,6 +94,10 @@ export default function Home() {
       'pdf-edit': 'pdf-edit',
       'pdf-compress': 'pdf-compress',
       'pdf-remove-password': 'pdf-unlock',
+      'pdf-to-word': 'pdf-to-word',
+      'pdf-merge': 'pdf-merge',
+      'pdf-split': 'pdf-split',
+      'pdf-rotate': 'pdf-rotate',
     }
     setSelectedTool(toolForOperation[newOptions.operation])
   }, [])
@@ -104,6 +113,10 @@ export default function Home() {
 
     if (options.operation === 'pdf-edit') {
       return images.length === 1 && images[0].file.type === 'application/pdf'
+    }
+
+    if (options.operation === 'pdf-merge') {
+      return images.length >= 2
     }
     
     return true

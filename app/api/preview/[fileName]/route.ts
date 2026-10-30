@@ -52,6 +52,8 @@ function getContentType(ext: string): string {
       return 'image/webp'
     case '.pdf':
       return 'application/pdf'
+    case '.docx':
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     default:
       return 'application/octet-stream'
   }

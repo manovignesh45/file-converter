@@ -2,12 +2,13 @@
 
 import { useState } from 'react'
 import {
-  ArrowDownRight, FileImage, FileLock2, FilePenLine, FilePlus2,
-  FileText, ImageDown, Scan, Stamp,
+  ArrowDownRight, Combine, FileImage, FileLock2, FilePenLine, FilePlus2,
+  FileText, FileType2, ImageDown, RotateCw, Scan, Scissors, Stamp,
 } from 'lucide-react'
 
 export type ToolId = 'image-compress' | 'image-resize' | 'image-convert' | 'images-to-pdf' |
-  'image-watermark' | 'pdf-edit' | 'pdf-compress' | 'pdf-unlock'
+  'image-watermark' | 'pdf-edit' | 'pdf-compress' | 'pdf-unlock' | 'pdf-to-word' | 'pdf-merge' |
+  'pdf-split' | 'pdf-rotate'
 
 export const tools = [
   { id: 'image-compress', category: 'Images', title: 'Compress image', description: 'Make images smaller while keeping the detail you need.', icon: ImageDown, tone: 'blue' },
@@ -15,6 +16,10 @@ export const tools = [
   { id: 'image-convert', category: 'Images', title: 'Convert image', description: 'Change images between JPG, PNG, and WebP.', icon: FileImage, tone: 'teal' },
   { id: 'images-to-pdf', category: 'Images', title: 'Images to PDF', description: 'Put one or more images into a single PDF.', icon: FilePlus2, tone: 'orange' },
   { id: 'image-watermark', category: 'Images', title: 'Watermark image', description: 'Add your text to images in the position you choose.', icon: Stamp, tone: 'pink' },
+  { id: 'pdf-to-word', category: 'PDFs', title: 'PDF to Word', description: 'Turn a PDF into an editable Word document.', icon: FileType2, tone: 'blue' },
+  { id: 'pdf-merge', category: 'PDFs', title: 'Merge PDF', description: 'Combine several PDFs into one, in the order you choose.', icon: Combine, tone: 'teal' },
+  { id: 'pdf-split', category: 'PDFs', title: 'Split PDF', description: 'Save every page, or chosen page ranges, as separate PDFs.', icon: Scissors, tone: 'pink' },
+  { id: 'pdf-rotate', category: 'PDFs', title: 'Rotate PDF', description: 'Turn all pages, or only some, the right way up.', icon: RotateCw, tone: 'green' },
   { id: 'pdf-edit', category: 'PDFs', title: 'Edit PDF', description: 'Add text, images, shapes, and markup to a PDF.', icon: FilePenLine, tone: 'violet' },
   { id: 'pdf-compress', category: 'PDFs', title: 'Compress PDF', description: 'Reduce the size of a PDF document.', icon: FileText, tone: 'green' },
   { id: 'pdf-unlock', category: 'PDFs', title: 'Unlock PDF', description: 'Remove a PDF password when you know it.', icon: FileLock2, tone: 'orange' },

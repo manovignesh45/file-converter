@@ -3,6 +3,9 @@ const nextConfig = {
   // Use standalone output to avoid trace collection issues
   output: 'standalone',
 
+  // PDF to Word extracts text with PDF.js on the server; load it from node_modules instead of bundling it.
+  serverExternalPackages: ['pdfjs-dist'],
+
   webpack(config) {
     // PDF.js's unminified build declares __webpack_exports__, which collides
     // with Next 15's Webpack 5.98 eval wrapper before getDocument can run.

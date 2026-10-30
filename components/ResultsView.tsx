@@ -235,7 +235,7 @@ export default function ResultsView({ files, onStartNew, isCleaningUp = false }:
               >
                 {/* File Preview */}
                 <div className="aspect-[4/3] bg-gray-50 relative overflow-hidden group-hover:bg-gray-100 transition-colors">
-                  {!hasError && !fileName.toLowerCase().endsWith('.pdf') ? (
+                  {!hasError && /\.(jpe?g|png|webp)$/i.test(fileName) ? (
                     <img
                       src={`/api/preview/${encodeURIComponent(fileName)}`}
                       alt={formatFileName(file)}
@@ -249,6 +249,11 @@ export default function ResultsView({ files, onStartNew, isCleaningUp = false }:
                          <div className="transform transition-transform duration-300 group-hover:scale-110">
                            <FileImage className="w-16 h-16 text-red-500 mx-auto mb-3 drop-shadow-sm" />
                            <span className="block text-xs font-bold text-red-600 uppercase tracking-widest bg-red-50 px-2 py-1 rounded-full">PDF Document</span>
+                         </div>
+                      ) : fileName.toLowerCase().endsWith('.docx') ? (
+                         <div className="transform transition-transform duration-300 group-hover:scale-110">
+                           <FileImage className="w-16 h-16 text-blue-500 mx-auto mb-3 drop-shadow-sm" />
+                           <span className="block text-xs font-bold text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-1 rounded-full">Word Document</span>
                          </div>
                       ) : (
                         <div className="text-gray-300">

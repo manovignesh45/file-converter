@@ -4,6 +4,10 @@ import fs from 'fs/promises'
 import { stat } from 'fs/promises'
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'processed')
+const DOWNLOAD_TYPES: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+}
 
 export async function GET(
   request: NextRequest,
@@ -32,7 +36,7 @@ export async function GET(
 
     const headers = new Headers()
     headers.append('Content-Disposition', `attachment; filename="${fileName}"`) 
-    headers.append('Content-Type', path.extname(fileName).toLowerCase() === '.pdf' ? 'application/pdf' : 'application/octet-stream')
+    headers.append('Content-Type', DOWNLOAD_TYPES[path.extname(fileName).toLowerCase()] ?? 'application/octet-stream')
     headers.append('X-Content-Type-Options', 'nosniff')
 
     return new NextResponse(fileBuffer, {

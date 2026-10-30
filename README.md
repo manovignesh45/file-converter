@@ -12,6 +12,13 @@ A full-stack file conversion platform built with Next.js, MongoDB, and Tailwind 
 - **PDF Compression**: Compress existing PDF files to reduce size
 - **Watermarking**: Add text watermarks with customizable positioning
 
+### PDF Tools
+- **PDF to Word**: Convert a PDF into an editable .docx, keeping headings, paragraphs, bold and italic text (scanned PDFs without selectable text are not supported)
+- **Merge PDF**: Combine several PDFs into one, in the order you drag them
+- **Split PDF**: Save every page as its own PDF, or split by page ranges such as `1-3, 4-6`
+- **Rotate PDF**: Rotate all pages, or selected pages, by 90°, 180° or 270°
+- **Edit, Compress and Unlock PDF**
+
 ### Advanced User Experience
 - **Drag & Drop Upload**: Intuitive file upload with instant previews
 - **Real-time Size Estimation**: Preview compression ratios before processing

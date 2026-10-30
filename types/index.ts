@@ -9,7 +9,8 @@ export interface ImageFile {
 }
 
 export interface ConversionOptions {
-  operation: 'compress' | 'resize' | 'convert' | 'pdf' | 'watermark' | 'pdf-compress' | 'pdf-remove-password' | 'pdf-edit'
+  operation: 'compress' | 'resize' | 'convert' | 'pdf' | 'watermark' | 'pdf-compress' | 'pdf-remove-password' | 'pdf-edit' |
+    'pdf-to-word' | 'pdf-merge' | 'pdf-split' | 'pdf-rotate'
   compressionQuality?: number
   targetSize?: number
   targetSizeUnit?: 'KB' | 'MB'
@@ -27,6 +28,8 @@ export interface ConversionOptions {
   pdfPageSize?: 'A4' | 'Letter' | 'Legal' | 'A3' // New field for PDF page size
   pdfImagesPerPage?: 1 | 2 // New field: number of images per page (1 = one per page, 2 = side-by-side)
   pdfPassword?: string
+  pdfPageRanges?: string // e.g. "1-3, 5" for split and rotate; empty means every page
+  pdfRotation?: 90 | 180 | 270
 }
 
 export interface JobProgress {

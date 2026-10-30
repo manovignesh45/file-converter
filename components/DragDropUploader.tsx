@@ -255,7 +255,9 @@ export default function DragDropUploader({ images, onImagesChange, options }: Dr
             </h2>
             <p className="text-sm text-gray-500 mt-1">
               {isPdfOperation
-                ? options.operation === 'pdf-edit' ? 'Choose one PDF to edit' : 'Process your PDF documents'
+                ? options.operation === 'pdf-edit' ? 'Choose one PDF to edit'
+                  : options.operation === 'pdf-merge' ? 'Add two or more PDFs and drag them into order'
+                  : 'Process your PDF documents'
                 : 'Process your images locally and securely'
               }
             </p>
