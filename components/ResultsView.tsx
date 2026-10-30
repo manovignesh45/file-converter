@@ -15,6 +15,12 @@ const FileImage = ({ className }: { className?: string }) => (
   </svg>
 )
 
+const FileText = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+)
+
 const Archive = ({ className }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
@@ -44,7 +50,7 @@ interface ResultsViewProps {
     fileName: string
     originalSize?: number
     processedSize?: number
-    compressionRatio?: number
+    compressionRatio?: number // percent saved, e.g. 35
     dimensions?: { width: number; height: number }
     format?: string
     pageCount?: number
@@ -110,10 +116,9 @@ export default function ResultsView({ files, onStartNew, isCleaningUp = false }:
 
     return {
       filesProcessed: files.length,
-      averageReduction: averageReduction > 0 ? averageReduction.toFixed(1) + '%' : 'N/A',
-      totalSize: totalProcessedSize > 0 ? formatFileSize(totalProcessedSize) : 'N/A',
-      spaceSaved: totalSpaceSaved > 0 ? formatFileSize(totalSpaceSaved) : 'N/A',
-      hasCompressionData: filesWithSizeData > 0
+      averageReduction: averageReduction > 0 ? averageReduction.toFixed(1) + '%' : null,
+      totalSize: formatFileSize(files.reduce((total, file) => total + (typeof file === 'object' ? file.processedSize ?? 0 : 0), 0)),
+      spaceSaved: totalSpaceSaved > 0 ? formatFileSize(totalSpaceSaved) : null,
     }
   }
 
@@ -144,7 +149,7 @@ export default function ResultsView({ files, onStartNew, isCleaningUp = false }:
         const url = window.URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
-        link.download = 'processed-images.zip'
+        link.download = 'processed-files.zip'
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -165,163 +170,137 @@ export default function ResultsView({ files, onStartNew, isCleaningUp = false }:
     return fileName.split('.').pop()?.toUpperCase() || 'UNKNOWN'
   }
 
+  const getFileMeta = (file: FileType): string => {
+    const parts = [getFileExtension(file), getFileSize(file)]
+    if (typeof file === 'object' && file.pageCount) parts.push(`${file.pageCount} page${file.pageCount === 1 ? '' : 's'}`)
+    if (typeof file === 'object' && file.dimensions) parts.push(`${file.dimensions.width}×${file.dimensions.height}`)
+    return parts.join(' · ')
+  }
+
+  const isSingleFile = files.length === 1
+
   return (
     <div className="card border-0 shadow-xl ring-1 ring-black/5 bg-white/70 backdrop-blur-xl animate-fade-in">
-      <div className="text-center mb-8 sm:mb-10 pt-4">
-        <div className="bg-green-100 p-4 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center shadow-inner animate-bounce-light">
-          <CheckCircle className="w-10 h-10 text-green-600" />
+      <div className="flex items-center gap-4 mb-6 sm:mb-8">
+        <div className="bg-green-100 p-3 rounded-full flex-shrink-0">
+          <CheckCircle className="w-7 h-7 text-green-600" />
         </div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-3">
-          Processing Complete!
-        </h2>
-        <p className="text-lg text-gray-600 px-4 max-w-2xl mx-auto leading-relaxed">
-          Your {files.length} image{files.length !== 1 ? 's' : ''} {files.length !== 1 ? 'have' : 'has'} been successfully processed and {files.length !== 1 ? 'are' : 'is'} ready for download.
-        </p>
-      </div>
-
-      {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8 sm:mb-10 max-w-4xl mx-auto">
-        <div className="bg-white/60 p-4 sm:p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
-          <div className="text-3xl font-bold text-gray-900 mb-1">{summaryStats.filesProcessed}</div>
-          <div className="text-xs sm:text-sm font-medium text-gray-500 uppercase tracking-wide">Processed</div>
-        </div>
-        <div className="bg-white/60 p-4 sm:p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
-          <div className={`text-3xl font-bold ${summaryStats.hasCompressionData ? 'text-green-600' : 'text-gray-400'}`}>
-            {summaryStats.averageReduction}
-          </div>
-          <div className="text-xs sm:text-sm font-medium text-gray-500 uppercase tracking-wide">Reduced</div>
-        </div>
-        <div className="bg-white/60 p-4 sm:p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
-          <div className={`text-3xl font-bold ${summaryStats.hasCompressionData ? 'text-primary-600' : 'text-gray-400'}`}>
-            {summaryStats.totalSize}
-          </div>
-          <div className="text-xs sm:text-sm font-medium text-gray-500 uppercase tracking-wide">Final Size</div>
-        </div>
-        <div className="bg-white/60 p-4 sm:p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
-          <div className={`text-3xl font-bold ${summaryStats.hasCompressionData ? 'text-purple-600' : 'text-gray-400'}`}>
-            {summaryStats.spaceSaved}
-          </div>
-          <div className="text-xs sm:text-sm font-medium text-gray-500 uppercase tracking-wide">Saved</div>
+        <div className="min-w-0">
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">Processing complete</h2>
+          <p className="text-gray-600">
+            {isSingleFile ? 'Your file is ready to download.' : `Your ${files.length} files are ready to download.`}
+          </p>
         </div>
       </div>
 
-      <div className="border-t border-gray-100 my-8"></div>
+      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+        {/* Summary and main actions; listed first so phones see the download button before the file list. */}
+        <aside className="lg:order-2 lg:w-80 flex-shrink-0">
+          <div className="lg:sticky lg:top-24 bg-white/80 rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
+            <button
+              onClick={isSingleFile ? () => handleDownload(files[0]) : handleDownloadAll}
+              className="w-full btn-primary py-3.5 justify-center text-base font-semibold shadow-lg shadow-primary-500/20"
+            >
+              {isSingleFile ? <Download className="w-5 h-5 mr-2" /> : <Archive className="w-5 h-5 mr-2" />}
+              {isSingleFile ? 'Download file' : `Download all ${files.length} (ZIP)`}
+            </button>
 
-      {/* Results Grid */}
-      <div className="space-y-6 mb-10">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <FileImage className="w-6 h-6 text-gray-400" />
-            Processed Files
-          </h3>
-          <button
-            onClick={handleDownloadAll}
-            className="w-full sm:w-auto btn-primary bg-gray-900 hover:bg-black text-white shadow-lg shadow-gray-900/20"
-          >
-            <Archive className="w-5 h-5 mr-2" />
-            Download All (ZIP)
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {files.map((file, index) => {
-            const fileName = getFileName(file)
-            const hasError = imageErrors[fileName] || false
-            
-            return (
-              <div
-                key={fileName}
-                className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
-              >
-                {/* File Preview */}
-                <div className="aspect-[4/3] bg-gray-50 relative overflow-hidden group-hover:bg-gray-100 transition-colors">
-                  {!hasError && /\.(jpe?g|png|webp)$/i.test(fileName) ? (
-                    <img
-                      src={`/api/preview/${encodeURIComponent(fileName)}`}
-                      alt={formatFileName(file)}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                      onError={() => handleImageError(fileName)}
-                      onLoad={() => handleImageLoad(fileName)}
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
-                      {fileName.toLowerCase().endsWith('.pdf') ? (
-                         <div className="transform transition-transform duration-300 group-hover:scale-110">
-                           <FileImage className="w-16 h-16 text-red-500 mx-auto mb-3 drop-shadow-sm" />
-                           <span className="block text-xs font-bold text-red-600 uppercase tracking-widest bg-red-50 px-2 py-1 rounded-full">PDF Document</span>
-                         </div>
-                      ) : fileName.toLowerCase().endsWith('.docx') ? (
-                         <div className="transform transition-transform duration-300 group-hover:scale-110">
-                           <FileImage className="w-16 h-16 text-blue-500 mx-auto mb-3 drop-shadow-sm" />
-                           <span className="block text-xs font-bold text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-1 rounded-full">Word Document</span>
-                         </div>
-                      ) : (
-                        <div className="text-gray-300">
-                          <FileImage className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                          <span className="text-xs">No Preview</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                    <button
-                      onClick={() => handleDownload(file)}
-                      className="w-full bg-white text-gray-900 font-medium py-2 rounded-lg text-sm shadow-sm hover:bg-gray-50 flex items-center justify-center"
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Quick Download
-                    </button>
-                  </div>
+            <dl className="grid grid-cols-2 gap-3 text-center">
+              <div className="bg-gray-50 rounded-xl p-3">
+                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Files</dt>
+                <dd className="text-xl font-bold text-gray-900">{summaryStats.filesProcessed}</dd>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3">
+                <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total size</dt>
+                <dd className="text-xl font-bold text-primary-600">{summaryStats.totalSize}</dd>
+              </div>
+              {summaryStats.averageReduction && (
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Reduced</dt>
+                  <dd className="text-xl font-bold text-green-600">{summaryStats.averageReduction}</dd>
                 </div>
+              )}
+              {summaryStats.spaceSaved && (
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Saved</dt>
+                  <dd className="text-xl font-bold text-purple-600">{summaryStats.spaceSaved}</dd>
+                </div>
+              )}
+            </dl>
 
-                {/* File Info */}
-                <div className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <h4 className="font-semibold text-gray-900 truncate flex-1 mr-2" title={formatFileName(file)}>
-                      {formatFileName(file)}
-                    </h4>
-                    <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-md uppercase tracking-wider">
-                      {getFileExtension(file)}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                    <span>{getFileSize(file)}</span>
-                    {typeof file === 'object' && file.compressionRatio && (
-                      <span className="text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full text-xs">
-                        -{Math.round((1 - (file.compressionRatio || 1)) * 100)}%
-                      </span>
+            <button
+              onClick={onStartNew}
+              disabled={isCleaningUp}
+              className={`w-full btn-secondary py-3 justify-center ${isCleaningUp ? 'opacity-75 cursor-not-allowed' : ''}`}
+            >
+              <RotateCcw className={`w-5 h-5 mr-2 ${isCleaningUp ? 'animate-spin' : ''}`} />
+              {isCleaningUp ? 'Cleaning up...' : 'Process more files'}
+            </button>
+          </div>
+        </aside>
+
+        {/* File list with a download button on every row */}
+        <section className="lg:order-1 flex-1 min-w-0" aria-labelledby="processed-files-heading">
+          <h3 id="processed-files-heading" className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">
+            Processed files
+          </h3>
+          <ul className="space-y-3">
+            {files.map(file => {
+              const fileName = getFileName(file)
+              const showImage = !imageErrors[fileName] && /\.(jpe?g|png|webp)$/i.test(fileName)
+              const isPdf = fileName.toLowerCase().endsWith('.pdf')
+              const isWord = fileName.toLowerCase().endsWith('.docx')
+
+              return (
+                <li
+                  key={fileName}
+                  className="flex items-center gap-3 sm:gap-4 bg-white border border-gray-100 rounded-2xl p-3 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className={`w-14 h-14 sm:w-16 sm:h-16 flex-shrink-0 rounded-xl overflow-hidden flex items-center justify-center ${
+                    isPdf ? 'bg-red-50' : isWord ? 'bg-blue-50' : 'bg-gray-50'
+                  }`}>
+                    {showImage ? (
+                      <img
+                        src={`/api/preview/${encodeURIComponent(fileName)}`}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={() => handleImageError(fileName)}
+                        onLoad={() => handleImageLoad(fileName)}
+                      />
+                    ) : (
+                      isPdf || isWord
+                        ? <FileText className={`w-7 h-7 ${isPdf ? 'text-red-500' : 'text-blue-500'}`} />
+                        : <FileImage className="w-7 h-7 text-gray-400" />
                     )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-gray-900 truncate" title={formatFileName(file)}>
+                      {formatFileName(file)}
+                    </p>
+                    <p className="text-sm text-gray-500 truncate">
+                      {getFileMeta(file)}
+                      {typeof file === 'object' && !!file.compressionRatio && file.compressionRatio > 0 && (
+                        <span className="ml-2 text-green-600 font-medium">
+                          -{Math.round(file.compressionRatio)}%
+                        </span>
+                      )}
+                    </p>
                   </div>
 
                   <button
                     onClick={() => handleDownload(file)}
-                    className="w-full btn-secondary py-2 text-sm justify-center border-gray-200 hover:border-primary-200 hover:text-primary-600"
+                    className="flex-shrink-0 btn-secondary py-2 px-3 sm:px-4 text-sm justify-center border-gray-200 hover:border-primary-200 hover:text-primary-600"
+                    aria-label={`Download ${formatFileName(file)}`}
                   >
-                    <Download className="w-4 h-4 mr-2" />
-                    Download
+                    <Download className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Download</span>
                   </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="bg-gray-50/50 -mx-6 -mb-6 p-6 sm:p-8 rounded-b-2xl border-t border-gray-100 mt-8">
-        <div className="flex flex-col sm:flex-row gap-4 max-w-2xl mx-auto">
-          <button
-            onClick={onStartNew}
-            disabled={isCleaningUp}
-            className={`flex-1 btn-primary py-3.5 flex items-center justify-center text-base font-semibold shadow-lg shadow-primary-500/20 ${
-              isCleaningUp ? 'opacity-75 cursor-not-allowed' : ''
-            }`}
-          >
-            <RotateCcw className={`w-5 h-5 mr-2 ${isCleaningUp ? 'animate-spin' : ''}`} />
-            {isCleaningUp ? 'Cleaning up...' : 'Process More Files'}
-          </button>
-        </div>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
       </div>
     </div>
   )
